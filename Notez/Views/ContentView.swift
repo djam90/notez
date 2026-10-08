@@ -1,0 +1,38 @@
+import SwiftData
+import SwiftUI
+
+struct ContentView: View {
+    let context: ModelContext
+    // Created once per window. (A `State(initialValue:)` in init would build a
+    // throwaway store + web view every time SwiftUI re-inits this view.)
+    @State private var store: NotesStore?
+
+    var body: some View {
+        Group {
+            if let store {
+                NotesWindow(store: store)
+            }
+        }
+        .onAppear {
+            if store == nil { store = NotesStore(context: context) }
+        }
+    }
+}
+
+private struct NotesWindow: View {
+    @Bindable var store: NotesStore
+
+    var body: some View {
+        NavigationSplitView {
+            SidebarView(store: store)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 400)
+        } detail: {
+            NoteDetailView(store: store)
+        }
+        .onChange(of: store.selectedID) { store.selectionChanged() }
+        .sheet(isPresented: $store.showSwitcher) {
+            QuickSwitcher(store: store)
+        }
+        .focusedSceneValue(\.store, store)
+    }
+}
