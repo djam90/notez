@@ -5,4 +5,6 @@ if [ -z "${DEVELOPER_DIR:-}" ] && ! xcodebuild -version >/dev/null 2>&1; then
 fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DERIVED="$ROOT/build"
-BUNDLE_ID="io.github.djam90.notez"
+# Debug builds use a separate bundle ID (and so separate data) from Release.
+BUNDLE_ID="io.github.djam90.notez.dev"
+RELEASE_BUNDLE_ID="io.github.djam90.notez"

@@ -6,7 +6,7 @@ While Notez is running on a Mac, it can serve your notes to AI tools such as Cla
 
 **Notez > Settings… > AI Access**, then tick **Allow AI tools to read and edit notes**. It is off by default.
 
-- Listens on `127.0.0.1:6683` (configurable). The listener is restricted to the loopback interface, so other machines can't connect.
+- Listens on `127.0.0.1:6683` (configurable; Notez Dev defaults to 6684). The listener is restricted to the loopback interface, so other machines can't connect.
 - Every request needs `Authorization: Bearer <token>`. The token is generated on first launch, shown in Settings and can be regenerated (old clients then get 401).
 - Requests with an `Origin` header that isn't `localhost`/`127.0.0.1` are rejected with 403 (DNS rebinding guard, as the MCP spec requires).
 - iOS and iPadOS don't run the server: there are no local AI tools there to talk to, and the app would be suspended in the background anyway.

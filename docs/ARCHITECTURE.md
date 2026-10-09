@@ -41,6 +41,9 @@ Notez.xcodeproj/                 Hand-written project, objectVersion 77
 Notez/
   NotezApp.swift                 @main, ModelContainer, menu Commands
   Models/Note.swift              Note, Project, NoteBody, Asset (@Model)
+  Models/Schema.swift            VersionedSchema + migration plan
+  Store/StoreBackup.swift        Backs up the store when a new version first launches
+  Views/StoreErrorView.swift     Shown if the store can't be opened
   Store/NotesStore.swift         Per-window state + all mutations + search
   Store/Seed.swift               First-launch welcome page
   Views/ContentView.swift        Creates the store once, NavigationSplitView
@@ -81,6 +84,16 @@ Note ──assets─▶ [Asset]          (1:n, cascade)
 | `Project` | `id: UUID`, `name`, `icon` (SF Symbol), `color` (`ProjectStyle` key), `sortIndex`, `createdAt`, `notes` | A sidebar section. Only top-level pages set `Note.project`; sub-pages follow their root (`Note.rootProject`). Deleting a project nullifies, so its pages become unfiled. |
 | `NoteBody` | `doc` (TipTap JSON string), `plainText` (for search), `pendingMarkdown`, `note` | Only faulted in when a note is opened or searched. `pendingMarkdown` is markdown awaiting conversion by the editor (seed, local API writes): it replaces an empty `doc` or is appended to an existing one, then cleared on the next save. |
 | `Asset` | `id: UUID`, `data` (`@Attribute(.externalStorage)`), `mimeType`, `createdAt`, `note` | Image bytes live outside SQLite. |
+
+**Versioning and migration.** `Models/Schema.swift` declares `NotezSchemaV1` (all four models) and `NotezMigrationPlan`. `NotezApp` opens the store with `Schema(versionedSchema: NotezSchema.self)` and the plan. Verified on a real store:
+
+- Adding a property with a default, or removing one, migrates automatically even without a new version.
+- An incompatible change (for example String → Date) fails to open the store. `NotezApp` then shows `StoreErrorView` instead of crashing, and the store is left untouched.
+- Such changes need a frozen copy of the old models plus a `.custom` stage. The steps are in the comment in `Schema.swift`.
+
+**Backups.** `StoreBackup.backUpIfVersionChanged` runs in `NotezApp.init` before the container opens. When `"<CFBundleShortVersionString> (<CFBundleVersion>)"` differs from `UserDefaults["store.lastLaunchedVersion"]`, it copies `default.store`, `-wal`, `-shm` and `.default_SUPPORT/` into `Application Support/Backups/<timestamp> from <old> to <new>/`, then prunes to the newest 5. The version is recorded before opening, so a build that fails to open the store doesn't take repeated backups and rotate the good ones out.
+
+**Dev and release data.** Debug builds use bundle ID `io.github.djam90.notez.dev` ("Notez Dev"), so they have their own container, store and UserDefaults. Release (`scripts/release-mac.sh`) is `io.github.djam90.notez`.
 
 CloudKit compatibility rules, which must hold for any new field:
 

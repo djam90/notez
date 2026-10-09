@@ -28,7 +28,7 @@ Why this shape:
 ```sh
 open Notez.xcodeproj           # pick "My Mac" or an iOS simulator, ⌘R
 # or
-scripts/run-mac.sh             # build + launch on Mac
+scripts/run-mac.sh             # build + launch "Notez Dev" on Mac (separate data)
 scripts/run-sim.sh             # build + launch on iPhone sim (SIM_NAME=... to change)
 ```
 
@@ -43,6 +43,20 @@ scripts/build.sh editor        # writes Notez/Resources/editor.html - commit it 
 Docs: [docs/FEATURES.md](docs/FEATURES.md) (every feature + how it's built), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design, data model, bridge), [docs/API.md](docs/API.md) (local MCP/REST API), [CLAUDE.md](CLAUDE.md) (rules for agents).
 
 In Debug builds the web view is inspectable from Safari > Develop. JS errors are forwarded to the Xcode console as `[editor] ...`.
+
+## Releasing (your everyday copy)
+
+```sh
+scripts/release-mac.sh 0.3.0
+```
+
+This bumps the version and build number, builds Release, quits the installed app, copies your data to `~/Notez-backups/<date>-before-v0.3.0/`, installs `/Applications/Notez.app`, commits "Release v0.3.0" and tags `v0.3.0`. The working tree must be clean.
+
+- **Dev vs real data:** Debug builds are a separate app, "Notez Dev" (`io.github.djam90.notez.dev`), with their own data. Trying out a work-in-progress build never touches your real notes.
+- **Data location:** `~/Library/Containers/io.github.djam90.notez/Data/Library/Application Support/` (`default.store*` plus `.default_SUPPORT/` for large images). It belongs to the bundle ID, so replacing the app keeps it.
+- **Automatic backups:** on the first launch of a new version, the app copies its store to `Backups/` in that folder before opening it, and keeps the last 5.
+- **If a version can't open your data**, it shows an error screen instead of starting. Nothing is changed. To restore, quit the app and copy a backup's files back over `default.store*`.
+- **Signing prompt:** builds are ad-hoc signed, so after an update macOS may ask whether Notez can access data from other apps. Allow it. Setting a Team in Xcode stops this.
 
 ## Enable iCloud sync
 

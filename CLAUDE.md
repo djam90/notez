@@ -13,7 +13,8 @@ Read these before non-trivial work:
 scripts/setup.sh              # fresh clone / new worktree: npm ci in editor/
 scripts/build.sh              # editor + macOS + iOS sim (default "all")
 scripts/build.sh editor|mac|ios
-scripts/run-mac.sh            # build + relaunch the Mac app
+scripts/run-mac.sh            # build + relaunch the Mac Debug app ("Notez Dev")
+scripts/release-mac.sh 0.3.0  # bump, build Release, back up data, install to /Applications, tag
 scripts/run-sim.sh            # build + install + launch on sim, streams console
 SIM_NAME="iPad Pro 11-inch (M5)" scripts/run-sim.sh --screenshot   # saves /tmp/notez-sim.png
 
@@ -50,12 +51,13 @@ The Xcode project uses **file-system synchronized groups** (objectVersion 77). A
 1. **Editor changes need a rebuild + commit of the artifact.** After editing anything in `editor/`, run `scripts/build.sh editor` and commit `Notez/Resources/editor.html` together with the source. Xcode never runs Node, so an un-rebuilt bundle means the app silently runs old editor code.
 2. **One store and one web view per window.** `NotesStore` (which owns `EditorController` → `WKWebView`) is created in `ContentView.onAppear` and held in `@State var store: NotesStore?`. Never construct it in a view `init`, `State(initialValue:)` or a computed property. SwiftUI re-runs inits, and each run creates and loads another web view. This exact bug caused a blank editor before.
 3. **Never recreate or reload the web view to switch notes.** Switching is `editor.load(note)` → `window.notez.load(...)`. `EditorView.make*View` must keep returning `controller.webView`.
-4. **Keep SwiftData models CloudKit-compatible:** every stored property has a default, every relationship is optional with an inverse, no `@Attribute(.unique)`, no non-optional to-one relationships. Breaking this breaks sync later, possibly with no visible error now.
-5. **Keep `Note` light.** The sidebar `@Query` loads every `Note`. Large or unbounded data (document JSON, full text, blobs) belongs in `NoteBody` or `Asset`, never on `Note`.
-6. **TipTap JSON (`NoteBody.doc`) is the source of truth.** Markdown is only import (`pendingMarkdown`, paste) and export (`getMarkdown`). Don't store HTML or markdown as the primary format.
-7. **Images never go into the document as base64.** Use the `uploadImage` bridge → `Asset` → `notez://asset/<uuid>` flow.
-8. **All web view loads go through `notez://`.** `decidePolicyFor` cancels any other navigation and opens it externally. Don't add `file://` loads or remote URLs to the editor.
-9. **The bridge contract has two sides.** If you change a message shape, update `editor/src/bridge.ts` types, the `editor/src/main.ts` usage, `EditorController.handle`/`call`, and the tables in `docs/ARCHITECTURE.md`.
+4. **Never risk the user's real data.** Debug builds are `io.github.djam90.notez.dev` with their own store. The Release app in `/Applications` (`io.github.djam90.notez`) holds real notes. Don't run, migrate-test or delete anything against the release container, and only run `scripts/release-mac.sh` when asked.
+5. **Keep SwiftData models CloudKit-compatible:** every stored property has a default, every relationship is optional with an inverse, no `@Attribute(.unique)`, no non-optional to-one relationships. Breaking this breaks sync later, possibly with no visible error now.
+6. **Keep `Note` light.** The sidebar `@Query` loads every `Note`. Large or unbounded data (document JSON, full text, blobs) belongs in `NoteBody` or `Asset`, never on `Note`.
+7. **TipTap JSON (`NoteBody.doc`) is the source of truth.** Markdown is only import (`pendingMarkdown`, paste) and export (`getMarkdown`). Don't store HTML or markdown as the primary format.
+8. **Images never go into the document as base64.** Use the `uploadImage` bridge → `Asset` → `notez://asset/<uuid>` flow.
+9. **All web view loads go through `notez://`.** `decidePolicyFor` cancels any other navigation and opens it externally. Don't add `file://` loads or remote URLs to the editor.
+10. **The bridge contract has two sides.** If you change a message shape, update `editor/src/bridge.ts` types, the `editor/src/main.ts` usage, `EditorController.handle`/`call`, and the tables in `docs/ARCHITECTURE.md`.
 
 ## Conventions
 
@@ -73,7 +75,7 @@ The Xcode project uses **file-system synchronized groups** (objectVersion 77). A
 
 ## Recipes
 
-**Add a field to a model.** Give it a default value. Put it on `NoteBody` if it can be large. Lightweight migration is automatic for additive changes with defaults. Update `docs/ARCHITECTURE.md` › Data model.
+**Add a field to a model.** Give it a default value. Put it on `NoteBody` if it can be large. Additive changes migrate automatically, with no new schema version. Renames, type changes and data transforms need a new `VersionedSchema` and a migration stage (see the comment in `Models/Schema.swift`). Run the Debug app on the existing dev store before and after, so a migration failure shows up there first. Update `docs/ARCHITECTURE.md` › Data model.
 
 **Add a slash command.** Add an entry to `slashItems` in `editor/src/slash.ts` (`title`, `hint`, `keywords`, `run(editor, range)` that starts with `chain(e, r)` so it deletes the `/query`). Then rebuild the editor.
 
@@ -92,7 +94,7 @@ Always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Pl
 - **Editor behaviour:** `cd editor && npm run dev`, open `/editor.html`. The dev host mocks the native side (localStorage saves, data-URL uploads) and `window.editor` is exposed for scripted checks such as `editor.getHTML()` or `editor.isActive('table')`. This is the fastest loop for anything in `editor/`.
 - **Native rendering:** `scripts/run-sim.sh --screenshot` (iPhone) or with `SIM_NAME="iPad Pro 11-inch (M5)"`, then view `/tmp/notez-sim.png`. You can't tap in the simulator from the CLI, so to exercise a flow, seed state (see `Seed.swift`) or use `npm run dev`.
 - **JS errors in the app:** `scripts/run-sim.sh` streams the console. Look for `[editor] …` lines (forwarded `window.onerror` / unhandled rejections). Safari > Develop gives the full inspector on Debug builds.
-- **Fresh state on the simulator:** `xcrun simctl uninstall <udid> io.github.djam90.notez` (wipes the store and UserDefaults, so the welcome page re-seeds).
+- **Fresh state on the simulator:** `xcrun simctl uninstall <udid> io.github.djam90.notez.dev` (wipes the store and UserDefaults, so the welcome page re-seeds).
 - Update the ✅/🟡 markers and "Verification status" in `docs/FEATURES.md` when you verify or add something.
 
 ## Gotchas
@@ -107,9 +109,9 @@ Always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Pl
 - **Deleting a `Note` cascades to its children, body and assets.** There is no trash yet.
 - **CloudKit is off** until a team + iCloud container are configured in Xcode (README). `.automatic` quietly falls back to local-only.
 - **The local API writes markdown to `pendingMarkdown`**, not JSON. After any API change to a page, call `NotesStore.reloadEverywhere(id)`, or an open editor overwrites it on the next keystroke. API tool/route changes need `docs/API.md` updated too.
-- **Testing the API:** it's off by default. The sandboxed prefs live at `~/Library/Containers/io.github.djam90.notez/Data/Library/Preferences/io.github.djam90.notez.plist` (`api.enabled`, `api.token`), so `defaults write <that path minus .plist> api.enabled -bool true` before launching, then `curl -H "Authorization: Bearer $(defaults read … api.token)" http://127.0.0.1:6683/api/notes`.
-- **Bundle ID is `io.github.djam90.notez`.** `scripts/env.sh` hardcodes it for simctl.
+- **Testing the API:** test against **Notez Dev**, never the installed app. It's off by default. The sandboxed prefs live at `~/Library/Containers/io.github.djam90.notez.dev/Data/Library/Preferences/io.github.djam90.notez.dev.plist` (`api.enabled`, `api.token`), so `defaults write <that path minus .plist> api.enabled -bool true` before launching, then `curl -H "Authorization: Bearer $(defaults read … api.token)" http://127.0.0.1:6684/api/notes`. Debug defaults to port 6684 and Release to 6683, so both apps can run at once.
+- **Bundle IDs:** Debug is `io.github.djam90.notez.dev` (display name "Notez Dev"), Release is `io.github.djam90.notez`. Both executables are named `Notez`, so never `pkill -x Notez`. Match the full path as `run-mac.sh` does. `scripts/env.sh` defines `BUNDLE_ID` (dev) and `RELEASE_BUNDLE_ID`. Don't use personal identifiers (name, email, domain) in the repo. It's public.
 
 ## Worktrees
 
-Committed: all source, the built `Notez/Resources/editor.html`, the Xcode project and the shared scheme. Not committed: `editor/node_modules`, `build/` and `xcuserdata`. In a new worktree, Xcode builds immediately. Run `scripts/setup.sh` only if you'll touch `editor/`. Each worktree has its own `build/` DerivedData, but the simulator app and its data are shared across worktrees (same bundle ID).
+Committed: all source, the built `Notez/Resources/editor.html`, the Xcode project and the shared scheme. Not committed: `editor/node_modules`, `build/` and `xcuserdata`. In a new worktree, Xcode builds immediately. Run `scripts/setup.sh` only if you'll touch `editor/`. Each worktree has its own `build/` DerivedData, but the dev app and its data (Mac and simulator) are shared across worktrees (same bundle ID).

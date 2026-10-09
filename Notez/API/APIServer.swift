@@ -17,7 +17,13 @@ final class APIServer {
         case stopped, running, failed(String)
     }
 
-    static let defaultPort = 6683 // N-O-T-E on a phone keypad
+    // N-O-T-E on a phone keypad. Debug uses the next port so Notez Dev and the
+    // installed app can both serve at once.
+    #if DEBUG
+    static let defaultPort = 6684
+    #else
+    static let defaultPort = 6683
+    #endif
 
     var isEnabled: Bool {
         didSet {

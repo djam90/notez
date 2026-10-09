@@ -3,30 +3,44 @@ import SwiftUI
 
 @main
 struct NotezApp: App {
-    let container: ModelContainer
+    let container: ModelContainer?
+    let storeURL: URL
+    let storeError: String?
     #if os(macOS)
-    let server: APIServer
+    let server: APIServer?
     #endif
 
     init() {
         // `.automatic` syncs via CloudKit once the iCloud capability is enabled
         // (see README); without it the store is purely local.
-        let config = ModelConfiguration(cloudKitDatabase: .automatic)
+        let schema = Schema(versionedSchema: NotezSchema.self)
+        let config = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+        storeURL = config.url
+        StoreBackup.backUpIfVersionChanged(storeURL: config.url)
         do {
-            container = try ModelContainer(for: Note.self, NoteBody.self, Asset.self, Project.self, configurations: config)
+            container = try ModelContainer(
+                for: schema, migrationPlan: NotezMigrationPlan.self, configurations: config
+            )
+            storeError = nil
         } catch {
-            fatalError("Failed to open store: \(error)")
+            print("[store] failed to open: \(error)")
+            container = nil
+            storeError = String(describing: error)
         }
         #if os(macOS)
-        server = APIServer(context: container.mainContext)
+        server = container.map { APIServer(context: $0.mainContext) }
         #endif
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView(context: container.mainContext)
+            if let container {
+                ContentView(context: container.mainContext)
+                    .modelContainer(container)
+            } else {
+                StoreErrorView(message: storeError ?? "", backups: StoreBackup.folder(for: storeURL))
+            }
         }
-        .modelContainer(container)
         .commands { NotezCommands() }
         #if os(macOS)
         .defaultSize(width: 1100, height: 720)
@@ -35,8 +49,10 @@ struct NotezApp: App {
         #if os(macOS)
         Settings {
             TabView {
-                APISettingsView(server: server)
-                    .tabItem { Label("AI Access", systemImage: "sparkles") }
+                if let server {
+                    APISettingsView(server: server)
+                        .tabItem { Label("AI Access", systemImage: "sparkles") }
+                }
             }
         }
         #endif

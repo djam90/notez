@@ -158,6 +158,13 @@ The bytes are sent to native once (base64 over the bridge) and stored as an `Ass
 | Image picker | NSOpenPanel | Photos / Camera / Files | Photos / Camera / Files |
 | Appearance | Follows system light/dark (web view is transparent) | same | same |
 
+## Versions and data safety ✅
+
+- **Separate dev app:** Debug builds are "Notez Dev" with their own data. The everyday app is installed by `scripts/release-mac.sh <x.y.z>`, which bumps the version, backs up data to `~/Notez-backups/`, installs to `/Applications`, commits and tags.
+- **Backup on upgrade:** the first launch of a new version copies the store to `Application Support/Backups/` (newest 5 kept) before opening it (`StoreBackup`).
+- **Safe failure:** if migration fails, `StoreErrorView` explains it and shows the backups path. The app doesn't crash and doesn't modify the store.
+- Verified on Mac with the dev store: adopting the versioned schema on an existing store, the backup, an automatic additive migration and reverting it, and the error screen for an incompatible change.
+
 ## Sync
 
 ### iCloud sync 🟡 (needs setup)
