@@ -15,11 +15,24 @@ Any page can contain sub-pages, to any depth, like Notion. The sidebar shows a c
 - **UI:** `SidebarView` filters `@Query(sort: \Note.sortIndex)` to roots, and `NoteTree` renders each node recursively. Leaf pages render as plain `NoteRow`s. Pages with children render as `DisclosureGroup(isExpanded: store.isExpanded(id))`.
 - **Children order:** `Note.sortedChildren`, by `sortIndex`.
 
+### Projects ✅ (sidebar rendering) / 🟡 (flows)
+Group top-level pages into named projects. Each project is a collapsible sidebar section between **Pinned** and **Pages**. **Pages** holds unfiled pages.
+
+- **Create:** **File > New Project…** (⌘⌥N) or the sidebar folder+ button. Opens a name alert (`NotesStore.projectPrompt`).
+- **Header context menu:** New Page, Rename…, Icon, Color, Move Up/Down, Delete Project. Deleting keeps the pages, they move to **Pages**.
+- **Icon and colour:** the header shows `Project.icon` (SF Symbol) tinted with `Project.color`. Choices live in `ProjectStyle` (`Views/ProjectMenus.swift`). Unknown values fall back to the defaults.
+- **Reorder:** drag a project header onto another to place it above, or onto **Pages** to move it last. Project drags carry a `project:` prefix so page drop targets ignore them. Also Move Up/Down in the context menu (`NotesStore.moveProject`).
+- **Filing pages:** drag a row onto a project header, or **Move to Project** in the row context menu or the page **⋯** menu (`MoveToProjectMenu`). Sub-pages follow their top-level page.
+- **New pages** from ⌘N, the ✎ button and ⌘K go into the open page's project, like a new note in the current folder. An empty project shows a **New Page** row.
+- The macOS subtitle and ⌘K results show the project at the start of the path (`Note.location`).
+- Collapse state persists (`NotesStore.collapsedProjects`). Opening a page in a collapsed project expands it.
+- New projects go to the bottom.
+
 ### Expansion state persists 🟡
 Expanded or collapsed folders survive relaunch. `NotesStore.expanded` is a `Set<UUID>` written to `UserDefaults["sidebar.expanded"]` in `didSet`. Creating a sub-page or moving a page into a parent auto-expands the parent. Opening a page via ⌘K or a link calls `revealInSidebar`, which expands its ancestors.
 
 ### New page / new sub-page 🟡
-- **⌘N** (menu **File > New Page**, sidebar ✎ button, empty-state button) creates a top-level page.
+- **⌘N** (menu **File > New Page**, sidebar ✎ button, empty-state button) creates a top-level page in the open page's project.
 - **⌘⇧N** (**File > New Sub-page**, row context menu, detail **⋯** menu) creates a child of the selected page.
 - New pages go to the **top** of their level (`sortIndex = min(siblings) - 1`) so quick dumps are easy to find. The title field is focused.
 - Implementation: `NotesStore.newNote(parent:title:)`.
@@ -156,11 +169,11 @@ The bytes are sent to native once (base64 over the bridge) and stored as an `Ass
 
 What has been confirmed in practice so far:
 
-- **iPad + iPhone simulators (screenshots):** welcome seed, markdown conversion, table/task/code/quote rendering, persistence across relaunch, reopen last page, light theme, layout.
+- **iPad + iPhone simulators (screenshots):** project sections in the sidebar (temporary seed), welcome seed, markdown conversion, table/task/code/quote rendering, persistence across relaunch, reopen last page, light theme, layout.
 - **Editor in a browser (`npm run dev`, scripted):** title → body navigation, slash menu filtering and insertion, table insert + Tab navigation, table bubble, formatting bubble position, markdown paste → table/tasks/bold, image paste, debounced save.
 - **macOS:** builds and launches. The UI has not been visually reviewed yet. Local API and MCP server exercised with curl and Claude Code.
 
-Not exercised end-to-end yet: ⌘K switcher, drag-to-re-nest, pin/delete flows, native image upload round trip (`uploadImage` → `Asset` → `notez://asset`), the macOS open panel, Copy as Markdown, link opening, CloudKit sync.
+Not exercised end-to-end yet: project create/rename/delete/move flows, ⌘K switcher, drag-to-re-nest, pin/delete flows, native image upload round trip (`uploadImage` → `Asset` → `notez://asset`), the macOS open panel, Copy as Markdown, link opening, CloudKit sync.
 
 ## Known limitations / next ideas
 

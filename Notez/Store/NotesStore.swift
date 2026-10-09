@@ -13,9 +13,21 @@ final class NotesStore {
     var expanded: Set<UUID> {
         didSet { UserDefaults.standard.set(expanded.map(\.uuidString), forKey: Self.expandedKey) }
     }
+    var collapsedProjects: Set<UUID> {
+        didSet { UserDefaults.standard.set(collapsedProjects.map(\.uuidString), forKey: Self.collapsedProjectsKey) }
+    }
+
+    enum ProjectPrompt: Equatable {
+        case new
+        case rename(Project)
+    }
+    /// Drives the new/rename project alert. `projectName` is its text field.
+    var projectPrompt: ProjectPrompt?
+    var projectName = ""
 
     @ObservationIgnored private var pendingFocus: EditorController.Focus = .none
     private static let expandedKey = "sidebar.expanded"
+    private static let collapsedProjectsKey = "sidebar.collapsedProjects"
     private static let lastOpenedKey = "lastOpened"
     /// Every open window, so changes made outside the editor (the local API) reach them.
     private static let windows = NSHashTable<NotesStore>.weakObjects()
@@ -25,6 +37,8 @@ final class NotesStore {
         self.editor = EditorController(context: context)
         let saved = UserDefaults.standard.stringArray(forKey: Self.expandedKey) ?? []
         self.expanded = Set(saved.compactMap(UUID.init(uuidString:)))
+        let collapsed = UserDefaults.standard.stringArray(forKey: Self.collapsedProjectsKey) ?? []
+        self.collapsedProjects = Set(collapsed.compactMap(UUID.init(uuidString:)))
         editor.onOpenNote = { [weak self] id in self?.open(id) }
         Self.windows.add(self)
 
@@ -66,6 +80,11 @@ final class NotesStore {
         guard let note = fetchNote(id) else { return }
         let ancestorIDs = note.ancestors.map(\.id)
         if !expanded.isSuperset(of: ancestorIDs) { expanded.formUnion(ancestorIDs) }
+        if let project = note.rootProject { reveal(project) }
+    }
+
+    private func reveal(_ project: Project) {
+        if collapsedProjects.contains(project.id) { collapsedProjects.remove(project.id) }
     }
 
     func isExpanded(_ id: UUID) -> Binding<Bool> {
@@ -77,18 +96,34 @@ final class NotesStore {
         )
     }
 
+    func isProjectExpanded(_ id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { !self.collapsedProjects.contains(id) },
+            set: { open in
+                if open { self.collapsedProjects.remove(id) } else { self.collapsedProjects.insert(id) }
+            }
+        )
+    }
+
     // MARK: - Mutations
 
+    /// Sub-pages ignore `project`, they belong to their root's project.
     @discardableResult
-    func newNote(parent: Note? = nil, title: String = "") -> Note {
+    func newNote(parent: Note? = nil, in project: Project? = nil, title: String = "") -> Note {
         // New pages go to the top of their level so quick dumps are easy to find.
         let top = context.siblings(of: parent).map(\.sortIndex).min() ?? 0
         let note = Note(title: title, parent: parent, sortIndex: top - 1)
+        if parent == nil { note.project = project }
         context.insert(note)
         try? context.save()
         if let parent { expanded.insert(parent.id) }
         open(note.id, focus: title.isEmpty ? .title : .body)
         return note
+    }
+
+    /// A top-level page in the open page's project, like a new note in the current folder.
+    func newPage(title: String = "") {
+        newNote(in: selectedNote?.rootProject, title: title)
     }
 
     func newSubnote() {
@@ -112,16 +147,92 @@ final class NotesStore {
         note.isPinned.toggle()
     }
 
-    /// Re-parent `note` under `newParent` (nil = top level). Refuses cycles.
-    func move(_ note: Note, into newParent: Note?) {
-        guard context.move(note, into: newParent) else { return }
+    /// Re-parent `note` under `newParent`, or to the top level of `project`
+    /// (nil = unfiled) when `newParent` is nil. Refuses cycles.
+    func move(_ note: Note, into newParent: Note?, project: Project? = nil) {
+        guard context.move(note, into: newParent, project: project) else { return }
         if let newParent { expanded.insert(newParent.id) }
+        if newParent == nil, let project { reveal(project) }
         try? context.save()
     }
 
-    func move(id: UUID, into newParent: Note?) {
+    func move(id: UUID, into newParent: Note?, project: Project? = nil) {
         guard let note = fetchNote(id) else { return }
-        move(note, into: newParent)
+        move(note, into: newParent, project: project)
+    }
+
+    // MARK: - Projects
+
+    func beginNewProject() {
+        projectName = ""
+        projectPrompt = .new
+    }
+
+    func beginRename(_ project: Project) {
+        projectName = project.name
+        projectPrompt = .rename(project)
+    }
+
+    /// Takes the prompt as captured by the alert, since dismissal may clear `projectPrompt` first.
+    func commitProjectPrompt(_ prompt: ProjectPrompt) {
+        projectPrompt = nil
+        let name = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        switch prompt {
+        case .new:
+            let bottom = allProjects().last?.sortIndex ?? 0
+            context.insert(Project(name: name, sortIndex: bottom + 1))
+        case .rename(let project):
+            project.name = name
+        }
+        try? context.save()
+    }
+
+    func setIcon(_ icon: String, for project: Project) {
+        project.icon = icon
+        try? context.save()
+    }
+
+    func setColor(_ color: String, for project: Project) {
+        project.color = color
+        try? context.save()
+    }
+
+    /// Places `project` just before `target`, or last when `target` is nil.
+    func moveProject(_ project: Project, before target: Project?) {
+        guard project.id != target?.id else { return }
+        var ordered = allProjects().filter { $0.id != project.id }
+        let index = target.flatMap { t in ordered.firstIndex { $0.id == t.id } } ?? ordered.count
+        ordered.insert(project, at: index)
+        renumber(ordered)
+    }
+
+    /// Swaps `project` with its neighbour (-1 = up, 1 = down).
+    func moveProject(_ project: Project, by offset: Int) {
+        var ordered = allProjects()
+        guard let i = ordered.firstIndex(where: { $0.id == project.id }),
+              ordered.indices.contains(i + offset) else { return }
+        ordered.swapAt(i, i + offset)
+        renumber(ordered)
+    }
+
+    private func renumber(_ ordered: [Project]) {
+        for (i, project) in ordered.enumerated() where project.sortIndex != Double(i) {
+            project.sortIndex = Double(i)
+        }
+        try? context.save()
+    }
+
+    func moveProject(id: UUID, before target: Project?) {
+        guard let project = allProjects().first(where: { $0.id == id }) else { return }
+        moveProject(project, before: target)
+    }
+
+    /// Keeps the project's pages, they become unfiled.
+    func delete(_ project: Project) {
+        for note in project.notes ?? [] { note.project = nil }
+        context.delete(project)
+        try? context.save()
     }
 
     func copyMarkdown() async {
@@ -152,6 +263,10 @@ final class NotesStore {
     static func noteWillBeDeletedEverywhere(_ note: Note) {
         for store in windows.allObjects { store.noteWillBeDeleted(note) }
     }
+
+    func allProjects() -> [Project] {
+        (try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.sortIndex)]))) ?? []
+    }
 }
 
 // Shared by window stores and the local API, which runs without a window.
@@ -168,16 +283,19 @@ extension ModelContext {
         return (try? fetch(descriptor)) ?? []
     }
 
-    /// Re-parents `note` to the bottom of `newParent` (nil = top level).
-    /// Returns false for no-ops and moves that would create a cycle.
+    /// Re-parents `note` to the bottom of `newParent`, or to the top level of
+    /// `project` (nil = unfiled) when `newParent` is nil. Sub-pages carry no
+    /// project, they follow their root. Returns false for no-ops and cycles.
     @discardableResult
-    func move(_ note: Note, into newParent: Note?) -> Bool {
+    func move(_ note: Note, into newParent: Note?, project: Project? = nil) -> Bool {
         if let newParent {
             guard newParent.id != note.id, !newParent.isDescendant(of: note) else { return false }
         }
-        guard note.parent?.id != newParent?.id else { return false }
+        let newProject = newParent == nil ? project : nil
+        guard note.parent?.id != newParent?.id || note.project?.id != newProject?.id else { return false }
         let bottom = siblings(of: newParent).map(\.sortIndex).max() ?? 0
         note.parent = newParent
+        note.project = newProject
         note.sortIndex = bottom + 1
         return true
     }

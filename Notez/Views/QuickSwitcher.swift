@@ -41,7 +41,7 @@ struct QuickSwitcher: View {
                         row(index: index) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(note.displayTitle).lineLimit(1)
-                                let path = note.ancestors.map(\.displayTitle).joined(separator: " / ")
+                                let path = note.location
                                 if !path.isEmpty || !note.preview.isEmpty {
                                     Text(path.isEmpty ? note.preview : path)
                                         .font(.caption)
@@ -96,7 +96,7 @@ struct QuickSwitcher: View {
         if highlighted < results.count {
             store.open(results[highlighted].id)
         } else if showCreate {
-            store.newNote(title: trimmed)
+            store.newPage(title: trimmed)
         }
         dismiss()
     }

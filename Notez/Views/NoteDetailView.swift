@@ -1,7 +1,9 @@
+import SwiftData
 import SwiftUI
 
 struct NoteDetailView: View {
     let store: NotesStore
+    @Query(sort: \Project.sortIndex) private var projects: [Project]
 
     var body: some View {
         let note = store.selectedNote
@@ -17,14 +19,14 @@ struct NoteDetailView: View {
                 } description: {
                     Text("⌘N for a new page, ⌘K to jump to one.")
                 } actions: {
-                    Button("New Page") { store.newNote() }
+                    Button("New Page") { store.newPage() }
                         .buttonStyle(.borderedProminent)
                 }
             }
         }
         .navigationTitle(note?.displayTitle ?? "")
         #if os(macOS)
-        .navigationSubtitle(note.map { $0.ancestors.map(\.displayTitle).joined(separator: " / ") } ?? "")
+        .navigationSubtitle(note?.location ?? "")
         #else
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -37,6 +39,7 @@ struct NoteDetailView: View {
                     }
                     Menu("More", systemImage: "ellipsis.circle") {
                         Button("New Sub-page", systemImage: "plus") { store.newNote(parent: note) }
+                        MoveToProjectMenu(note: note, store: store, projects: projects)
                         Button("Copy as Markdown", systemImage: "doc.on.doc") {
                             Task { await store.copyMarkdown() }
                         }

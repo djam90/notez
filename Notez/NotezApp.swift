@@ -13,7 +13,7 @@ struct NotezApp: App {
         // (see README); without it the store is purely local.
         let config = ModelConfiguration(cloudKitDatabase: .automatic)
         do {
-            container = try ModelContainer(for: Note.self, NoteBody.self, Asset.self, configurations: config)
+            container = try ModelContainer(for: Note.self, NoteBody.self, Asset.self, Project.self, configurations: config)
         } catch {
             fatalError("Failed to open store: \(error)")
         }
@@ -48,11 +48,13 @@ struct NotezCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Page") { store?.newNote() }
+            Button("New Page") { store?.newPage() }
                 .keyboardShortcut("n")
             Button("New Sub-page") { store?.newSubnote() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(store?.selectedNote == nil)
+            Button("New Project…") { store?.beginNewProject() }
+                .keyboardShortcut("n", modifiers: [.command, .option])
         }
         CommandGroup(after: .pasteboard) {
             Button("Copy Page as Markdown") { Task { await store?.copyMarkdown() } }

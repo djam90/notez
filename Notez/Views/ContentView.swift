@@ -33,6 +33,18 @@ private struct NotesWindow: View {
         .sheet(isPresented: $store.showSwitcher) {
             QuickSwitcher(store: store)
         }
+        .alert(
+            store.projectPrompt == .new ? "New Project" : "Rename Project",
+            isPresented: Binding(
+                get: { store.projectPrompt != nil },
+                set: { if !$0 { store.projectPrompt = nil } }
+            ),
+            presenting: store.projectPrompt
+        ) { prompt in
+            TextField("Name", text: $store.projectName)
+            Button("Cancel", role: .cancel) {}
+            Button(prompt == .new ? "Create" : "Rename") { store.commitProjectPrompt(prompt) }
+        }
         .focusedSceneValue(\.store, store)
     }
 }

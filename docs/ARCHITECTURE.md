@@ -40,13 +40,14 @@ Notez.xcodeproj/                 Hand-written project, objectVersion 77
   xcshareddata/xcschemes/        Shared "Notez" scheme
 Notez/
   NotezApp.swift                 @main, ModelContainer, menu Commands
-  Models/Note.swift              Note, NoteBody, Asset (@Model)
+  Models/Note.swift              Note, Project, NoteBody, Asset (@Model)
   Store/NotesStore.swift         Per-window state + all mutations + search
   Store/Seed.swift               First-launch welcome page
   Views/ContentView.swift        Creates the store once, NavigationSplitView
-  Views/SidebarView.swift        Pinned + page tree, drag/drop, context menus
+  Views/SidebarView.swift        Pinned, project sections, page tree, drag/drop, context menus
   Views/NoteDetailView.swift     Editor host + empty state + toolbar
   Views/QuickSwitcher.swift      ⌘K jump/create
+  Views/ProjectMenus.swift       Project icon/colour choices, style pickers, Move to Project menu
   Editor/EditorController.swift  Owns the WKWebView, JS bridge, delegates
   Editor/NotezSchemeHandler.swift notez:// scheme: editor HTML + image assets
   Editor/EditorView.swift        NS/UIViewRepresentable returning the shared web view
@@ -69,13 +70,15 @@ docs/                            This file, FEATURES.md, API.md
 
 ```
 Note ──parent──▶ Note            (tree; children inverse, cascade delete)
+Note ──project─▶ Project         (top-level pages only; notes inverse, nullify)
 Note ──body───▶ NoteBody         (1:1, cascade)
 Note ──assets─▶ [Asset]          (1:n, cascade)
 ```
 
 | Model | Fields | Notes |
 | --- | --- | --- |
-| `Note` | `id: UUID`, `title`, `icon` (emoji or empty), `preview` (first 160 chars, single line), `isPinned`, `sortIndex: Double`, `createdAt`, `updatedAt`, `parent`, `children`, `body`, `assets` | Kept small on purpose. The sidebar `@Query` loads every `Note`. |
+| `Note` | `id: UUID`, `title`, `icon` (emoji or empty), `preview` (first 160 chars, single line), `isPinned`, `sortIndex: Double`, `createdAt`, `updatedAt`, `parent`, `project`, `children`, `body`, `assets` | Kept small on purpose. The sidebar `@Query` loads every `Note`. |
+| `Project` | `id: UUID`, `name`, `icon` (SF Symbol), `color` (`ProjectStyle` key), `sortIndex`, `createdAt`, `notes` | A sidebar section. Only top-level pages set `Note.project`; sub-pages follow their root (`Note.rootProject`). Deleting a project nullifies, so its pages become unfiled. |
 | `NoteBody` | `doc` (TipTap JSON string), `plainText` (for search), `pendingMarkdown`, `note` | Only faulted in when a note is opened or searched. `pendingMarkdown` is markdown awaiting conversion by the editor (seed, local API writes): it replaces an empty `doc` or is appended to an existing one, then cleared on the next save. |
 | `Asset` | `id: UUID`, `data` (`@Attribute(.externalStorage)`), `mimeType`, `createdAt`, `note` | Image bytes live outside SQLite. |
 
@@ -166,13 +169,15 @@ On macOS, `<input type=file>` needs `WKUIDelegate.runOpenPanel` (implemented, im
 
 - `selectedID: UUID?` is bound to the sidebar `List(selection:)`.
 - `expanded: Set<UUID>` is persisted to `UserDefaults["sidebar.expanded"]`. `isExpanded(id)` returns a `Binding` for `DisclosureGroup`.
+- `collapsedProjects: Set<UUID>` is persisted to `UserDefaults["sidebar.collapsedProjects"]`. Project sections default to expanded. `isProjectExpanded(id)` returns the `Section(isExpanded:)` binding.
 - `showSwitcher` presents the ⌘K sheet.
+- `projectPrompt` (`.new` / `.rename(Project)`) plus `projectName` drive the name alert in `NotesWindow`.
 - `pendingFocus` (not observed) tells the next `selectionChanged()` where to put the caret: the title for brand-new pages, the body for pages created from ⌘K with a title.
 - Menu commands reach the active window's store through `@FocusedValue(\.store)`, which `.focusedSceneValue(\.store, store)` provides.
 
-Changes made outside the editor (the local API) reach open windows through a weak registry of stores: `NotesStore.reloadEverywhere(id)` reloads a page that is open, and `noteWillBeDeletedEverywhere(note)` moves selection off a page about to be deleted. Lookups, `move` and search live in a `ModelContext` extension so the API can use them without a window.
+Changes made outside the editor (the local API) reach open windows through a weak registry of stores: `NotesStore.reloadEverywhere(id)` reloads a page that is open, and `noteWillBeDeletedEverywhere(note)` moves selection off a page about to be deleted. Lookups, `move` (including the project rules) and search live in a `ModelContext` extension so the API can use them without a window.
 
-Mutations: `newNote(parent:title:)`, `newSubnote()`, `delete(_:)` (moves selection to the parent if the selected page or an ancestor is deleted), `togglePin(_:)`, `move(_:into:)` (refuses self and descendant targets to prevent cycles), `copyMarkdown()`.
+Mutations: `newNote(parent:in:title:)`, `newPage(title:)` (top level, in the open page's project), `newSubnote()`, `delete(_:)` (moves selection to the parent if the selected page or an ancestor is deleted), `togglePin(_:)`, `move(_:into:project:)` (refuses self and descendant targets to prevent cycles; nil parent means top level of `project`), `beginNewProject()`, `beginRename(_:)`, `commitProjectPrompt(_:)`, `setIcon`, `setColor`, `moveProject(_:before:)` / `moveProject(_:by:)` (renumber `sortIndex` 0…n), `delete(_: Project)`, `copyMarkdown()`.
 
 Search (`search(_:)`): an empty query returns the 20 most recently updated pages. Otherwise it fetches title matches (`localizedStandardContains`, newest first), then `NoteBody.plainText` matches, de-duplicated and capped at 50. Both run as SQLite predicates.
 

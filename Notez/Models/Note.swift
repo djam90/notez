@@ -18,6 +18,8 @@ final class Note {
     var updatedAt: Date = Date()
 
     var parent: Note?
+    /// Only set on top-level pages. Sub-pages follow their root (`rootProject`).
+    var project: Project?
     @Relationship(deleteRule: .cascade, inverse: \Note.parent)
     var children: [Note]? = []
 
@@ -54,6 +56,15 @@ final class Note {
         return chain
     }
 
+    var rootProject: Project? { (ancestors.first ?? self).project }
+
+    /// "Project / Parent / …" for subtitles. Excludes the page itself.
+    var location: String {
+        let chain = ancestors
+        let project = (chain.first ?? self).project.map { [$0.displayName] } ?? []
+        return (project + chain.map(\.displayTitle)).joined(separator: " / ")
+    }
+
     func isDescendant(of other: Note) -> Bool {
         var node = parent
         while let n = node {
@@ -62,6 +73,29 @@ final class Note {
         }
         return false
     }
+}
+
+/// A named group of top-level pages, shown as its own sidebar section.
+@Model
+final class Project {
+    var id: UUID = UUID()
+    var name: String = ""
+    /// SF Symbol name and a `ProjectStyle.colors` key ("" = default tint).
+    var icon: String = "folder"
+    var color: String = ""
+    var sortIndex: Double = 0
+    var createdAt: Date = Date()
+
+    // Deleting a project keeps its pages, they drop back to the unfiled list.
+    @Relationship(deleteRule: .nullify, inverse: \Note.project)
+    var notes: [Note]? = []
+
+    init(name: String, sortIndex: Double = 0) {
+        self.name = name
+        self.sortIndex = sortIndex
+    }
+
+    var displayName: String { name.isEmpty ? "Untitled Project" : name }
 }
 
 /// The editor document (TipTap JSON) plus plain text for search.
