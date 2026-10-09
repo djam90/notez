@@ -47,7 +47,7 @@ final class NotesAPI {
     }
 
     func listProjects(_ args: Args) throws -> Any {
-        let projects = (try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.sortIndex)]))) ?? []
+        let projects = context.projects()
         let unfiled = context.siblings(of: nil).filter { $0.project == nil }.count
         return ["projects": projects.map(projectSummary), "unfiledPageCount": unfiled]
     }
@@ -141,21 +141,48 @@ final class NotesAPI {
         guard let name = try string(args, "name")?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
             throw APIError.badRequest("name is required")
         }
-        let icon = try string(args, "icon") ?? "folder"
-        let color = try string(args, "color") ?? ""
-        guard ProjectStyle.icons.contains(where: { $0.symbol == icon }) else {
-            throw APIError.badRequest("unknown icon \(icon). Use one of: \(ProjectStyle.icons.map(\.symbol).joined(separator: ", "))")
-        }
-        guard ProjectStyle.colors.contains(where: { $0.key == color }) else {
-            throw APIError.badRequest("unknown color \(color). Use one of: \(ProjectStyle.colors.map(\.key).filter { !$0.isEmpty }.joined(separator: ", ")), or \"\" for the default")
-        }
-        let bottom = (try? context.fetch(FetchDescriptor<Project>()))?.map(\.sortIndex).max() ?? 0
+        let icon = try iconArg(args) ?? "folder"
+        let color = try colorArg(args) ?? ""
+        let bottom = context.projects().last?.sortIndex ?? 0
         let project = Project(name: name, sortIndex: bottom + 1)
         project.icon = icon
         project.color = color
         context.insert(project)
         try context.save()
         return projectSummary(project)
+    }
+
+    func updateProject(_ args: Args) throws -> Any {
+        let project = try self.project(args)
+        // Validate everything before changing anything.
+        let name = try string(args, "name")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name?.isEmpty == true { throw APIError.badRequest("name can't be empty") }
+        let icon = try iconArg(args)
+        let color = try colorArg(args)
+        // "end", "" or null = last.
+        let before: Project?? = try args["beforeId"].map { value in
+            guard let id = value as? String, !id.isEmpty, id != "end" else { return nil }
+            return try self.project(id: id)
+        }
+        if let target = before ?? nil, target.id == project.id {
+            throw APIError.badRequest("beforeId can't be the project itself")
+        }
+        if let name { project.name = name }
+        if let icon { project.icon = icon }
+        if let color { project.color = color }
+        if let before { context.moveProject(project, before: before) }
+        try context.save()
+        return projectSummary(project)
+    }
+
+    /// Keeps the pages, they become unfiled.
+    func deleteProject(_ args: Args) throws -> Any {
+        let project = try self.project(args)
+        let id = project.id.uuidString
+        let unfiled = project.notes?.count ?? 0
+        context.deleteProject(project)
+        try context.save()
+        return ["deleted": id, "pagesUnfiled": unfiled]
     }
 
     func asset(_ id: String) throws -> (data: Data, mimeType: String) {
@@ -209,11 +236,36 @@ final class NotesAPI {
         if value is NSNull { return nil }
         guard let id = value as? String else { throw APIError.badRequest("projectId must be a string") }
         if id.isEmpty || id == "none" { return nil }
-        guard let uuid = UUID(uuidString: id) else { throw APIError.badRequest("invalid projectId \(id)") }
+        return try project(id: id)
+    }
+
+    private func project(_ args: Args) throws -> Project {
+        guard let id = args["id"] as? String else { throw APIError.badRequest("id is required") }
+        return try project(id: id)
+    }
+
+    private func project(id: String) throws -> Project {
+        guard let uuid = UUID(uuidString: id) else { throw APIError.badRequest("invalid project id \(id)") }
         var descriptor = FetchDescriptor<Project>(predicate: #Predicate { $0.id == uuid })
         descriptor.fetchLimit = 1
         guard let project = try? context.fetch(descriptor).first else { throw APIError.notFound("project \(id)") }
         return project
+    }
+
+    private func iconArg(_ args: Args) throws -> String? {
+        guard let icon = try string(args, "icon") else { return nil }
+        guard ProjectStyle.icons.contains(where: { $0.symbol == icon }) else {
+            throw APIError.badRequest("unknown icon \(icon). Use one of: \(ProjectStyle.icons.map(\.symbol).joined(separator: ", "))")
+        }
+        return icon
+    }
+
+    private func colorArg(_ args: Args) throws -> String? {
+        guard let color = try string(args, "color") else { return nil }
+        guard ProjectStyle.colors.contains(where: { $0.key == color }) else {
+            throw APIError.badRequest("unknown color \(color). Use one of: \(ProjectStyle.colors.map(\.key).filter { !$0.isEmpty }.joined(separator: ", ")), or \"\" for the default")
+        }
+        return color
     }
 
     private func projectSummary(_ project: Project) -> [String: Any] {

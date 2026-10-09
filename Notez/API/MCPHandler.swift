@@ -139,6 +139,25 @@ final class MCPHandler {
             run: { try $0.createProject($1) }
         ),
         Tool(
+            name: "update_project", title: "Update project",
+            description: "Rename, restyle or reorder a project. Only the fields you pass are changed.",
+            properties: [
+                "id": prop("string", "Project id from list_projects."),
+                "name": prop("string", "New name."),
+                "icon": prop("string", "SF Symbol name, one of the create_project icons."),
+                "color": prop("string", "Colour, one of the create_project colours, or \"\" for none."),
+                "beforeId": prop("string", "Move the project just above this project id in the sidebar, or \"end\" to move it to the bottom."),
+            ],
+            required: ["id"],
+            run: { try $0.updateProject($1) }
+        ),
+        Tool(
+            name: "delete_project", title: "Delete project",
+            description: "Delete a project. Its pages are kept and become unfiled (no project).",
+            properties: ["id": prop("string", "Project id from list_projects.")], required: ["id"], destructive: true,
+            run: { try $0.deleteProject($1) }
+        ),
+        Tool(
             name: "search_notes", title: "Search pages",
             description: "Search page titles and full text. Title matches come first. Returns pages with a snippet around the match. An empty query returns the most recently edited pages.",
             properties: [

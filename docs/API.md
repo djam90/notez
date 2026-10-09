@@ -44,6 +44,8 @@ Streamable HTTP transport, JSON responses only (no SSE stream, no sessions). `GE
 | `list_notes` | `parentId?`, `projectId?` | No `parentId`: every page depth-first in sidebar order. `"root"`: top-level pages only. `projectId` limits either to one project (`"none"` = unfiled). |
 | `list_projects` | | `{projects: [project], unfiledPageCount}` in sidebar order. |
 | `create_project` | `name`, `icon?`, `color?` | Goes to the bottom of the sidebar. `icon`/`color` must be `ProjectStyle` values (the error lists them). |
+| `update_project` | `id`, `name?`, `icon?`, `color?`, `beforeId?` | Only given fields change. `beforeId` moves the project just above that project, `"end"` to the bottom. Everything is validated before anything changes. |
+| `delete_project` | `id` | Deletes the project; its pages stay and become unfiled. Returns `{deleted, pagesUnfiled}`. Marked `destructiveHint`. |
 | `search_notes` | `query`, `limit?` (20, max 100) | Title matches, then full text. Each result has a `snippet`. Empty query = recently edited. |
 | `get_note` | `id` | Metadata + `markdown` + direct `children`. |
 | `create_note` | `title`, `markdown?`, `parentId?`, `projectId?`, `icon?`, `pinned?` | New pages go to the top of their level. `projectId` files a new top-level page. |
@@ -61,6 +63,8 @@ All responses are JSON. Errors are `{"error": "message"}` with a 4xx/5xx status.
 | `GET /api/notes` | `?parentId=<id>\|root&projectId=<id>\|none` | `{notes: [summary]}` |
 | `GET /api/projects` | | `{projects: [project], unfiledPageCount}` |
 | `POST /api/projects` | `{name, icon?, color?}` | `201` project |
+| `PATCH /api/projects/<id>` | `{name?, icon?, color?, beforeId?}` | project |
+| `DELETE /api/projects/<id>` | | `{deleted, pagesUnfiled}` |
 | `GET /api/search` | `?q=…&limit=…` | `{results: [summary + snippet]}` |
 | `GET /api/notes/<id>` | | detail |
 | `POST /api/notes` | `{title, markdown?, parentId?, projectId?, icon?, pinned?}` | `201` detail |
@@ -89,8 +93,8 @@ curl -H "Authorization: Bearer $TOKEN" -X POST http://127.0.0.1:6683/api/notes \
 | `Notez/API/MarkdownExport.swift` | TipTap JSON to markdown. |
 | `Notez/Views/APISettingsView.swift` | Settings > AI Access. |
 
-Everything runs on the main actor against `container.mainContext`, the same context the windows use. The sandbox entitlement comes from `ENABLE_INCOMING_NETWORK_CONNECTIONS = YES`.
+Everything runs on the main actor against `container.mainContext`, the same context the windows use. Project ordering and deletion live in the `ModelContext` extension in `NotesStore.swift`, shared with the sidebar. The sandbox entitlement comes from `ENABLE_INCOMING_NETWORK_CONNECTIONS = YES`.
 
 ## Limitations
 
-- Projects can be listed, created and filed into, but not renamed, restyled, reordered or deleted through the API yet.
+- No image upload. Pages can't be reordered within their level (the app can't either: new pages go to the top).

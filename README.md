@@ -93,7 +93,7 @@ This list must match the current build. Every commit that adds or changes a feat
 - Autosave (300 ms debounce, flushed on switch/background). Copy page as Markdown
 
 **AI access (Mac)**
-- Local MCP server and REST API so Claude and other AI tools can list, search, read, create, edit, move and delete pages, and list, create and file into projects, while Notez runs. Off by default, loopback only, bearer token. Settings (`⌘,`) > AI Access. See [docs/API.md](docs/API.md)
+- Local MCP server and REST API so Claude and other AI tools can list, search, read, create, edit, move and delete pages, and list, create, rename, restyle, reorder, delete and file into projects, while Notez runs. Off by default, loopback only, bearer token. Settings (`⌘,`) > AI Access. See [docs/API.md](docs/API.md)
 
 **Data safety**
 - Dev builds ("Notez Dev", red DEV Dock badge) have separate data from the installed app
@@ -113,7 +113,7 @@ This list must match the current build. Every commit that adds or changes a feat
 
 ## Ideas next
 
-- Rename, restyle, reorder and delete projects through the API
+- Image upload through the API
 - Global quick-capture hotkey / menu bar extra on Mac, Share Extension + widget on iOS
 - `[[` page links (the `notez://note/<id>` route already opens notes)
 - Orphaned image cleanup, trash/undo delete, markdown folder export

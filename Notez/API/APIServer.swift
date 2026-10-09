@@ -168,7 +168,7 @@ final class APIServer {
                                 headers: ["WWW-Authenticate": "Bearer"])
         }
 
-        // "/api/notes/<id>" routes as "/api/notes/:id".
+        // "/api/notes/<id>" routes as "/api/notes/:id", same for projects and assets.
         var parts = request.path.split(separator: "/").map(String.init)
         let id = parts.count == 3 ? parts[2] : ""
         if parts.count == 3 { parts[2] = ":id" }
@@ -196,6 +196,10 @@ final class APIServer {
                 return .ok(try api.listProjects([:]))
             case ("POST", "/api/projects"):
                 return HTTPResponse(status: 201, json: try api.createProject(try request.jsonBody()))
+            case ("PATCH", "/api/projects/:id"):
+                return .ok(try api.updateProject(try request.jsonBody().merging(["id": id]) { $1 }))
+            case ("DELETE", "/api/projects/:id"):
+                return .ok(try api.deleteProject(["id": id]))
             case ("GET", "/api/search"):
                 var args: [String: Any] = request.query
                 args["query"] = request.query["q"] ?? ""

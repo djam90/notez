@@ -188,7 +188,7 @@ On macOS, `<input type=file>` needs `WKUIDelegate.runOpenPanel` (implemented, im
 - `pendingFocus` (not observed) tells the next `selectionChanged()` where to put the caret: the title for brand-new pages, the body for pages created from ⌘K with a title.
 - Menu commands reach the active window's store through `@FocusedValue(\.store)`, which `.focusedSceneValue(\.store, store)` provides.
 
-Changes made outside the editor (the local API) reach open windows through a weak registry of stores: `NotesStore.reloadEverywhere(id)` reloads a page that is open, and `noteWillBeDeletedEverywhere(note)` moves selection off a page about to be deleted. Lookups, `move` (including the project rules) and search live in a `ModelContext` extension so the API can use them without a window.
+Changes made outside the editor (the local API) reach open windows through a weak registry of stores: `NotesStore.reloadEverywhere(id)` reloads a page that is open, and `noteWillBeDeletedEverywhere(note)` moves selection off a page about to be deleted. Lookups, `move` (including the project rules), project ordering/deletion and search live in a `ModelContext` extension so the API can use them without a window.
 
 Mutations: `newNote(parent:in:title:)`, `newPage(title:)` (top level, in the open page's project), `newSubnote()`, `delete(_:)` (moves selection to the parent if the selected page or an ancestor is deleted), `togglePin(_:)`, `move(_:into:project:)` (refuses self and descendant targets to prevent cycles; nil parent means top level of `project`), `beginNewProject()`, `beginRename(_:)`, `commitProjectPrompt(_:)`, `setIcon`, `setColor`, `moveProject(_:before:)` / `moveProject(_:by:)` (renumber `sortIndex` 0…n), `delete(_: Project)`, `copyMarkdown()`.
 

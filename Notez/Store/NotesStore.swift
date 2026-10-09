@@ -200,11 +200,8 @@ final class NotesStore {
 
     /// Places `project` just before `target`, or last when `target` is nil.
     func moveProject(_ project: Project, before target: Project?) {
-        guard project.id != target?.id else { return }
-        var ordered = allProjects().filter { $0.id != project.id }
-        let index = target.flatMap { t in ordered.firstIndex { $0.id == t.id } } ?? ordered.count
-        ordered.insert(project, at: index)
-        renumber(ordered)
+        context.moveProject(project, before: target)
+        try? context.save()
     }
 
     /// Swaps `project` with its neighbour (-1 = up, 1 = down).
@@ -213,13 +210,7 @@ final class NotesStore {
         guard let i = ordered.firstIndex(where: { $0.id == project.id }),
               ordered.indices.contains(i + offset) else { return }
         ordered.swapAt(i, i + offset)
-        renumber(ordered)
-    }
-
-    private func renumber(_ ordered: [Project]) {
-        for (i, project) in ordered.enumerated() where project.sortIndex != Double(i) {
-            project.sortIndex = Double(i)
-        }
+        context.renumber(ordered)
         try? context.save()
     }
 
@@ -228,10 +219,8 @@ final class NotesStore {
         moveProject(project, before: target)
     }
 
-    /// Keeps the project's pages, they become unfiled.
     func delete(_ project: Project) {
-        for note in project.notes ?? [] { note.project = nil }
-        context.delete(project)
+        context.deleteProject(project)
         try? context.save()
     }
 
@@ -264,9 +253,7 @@ final class NotesStore {
         for store in windows.allObjects { store.noteWillBeDeleted(note) }
     }
 
-    func allProjects() -> [Project] {
-        (try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.sortIndex)]))) ?? []
-    }
+    func allProjects() -> [Project] { context.projects() }
 }
 
 // Shared by window stores and the local API, which runs without a window.
@@ -298,6 +285,31 @@ extension ModelContext {
         note.project = newProject
         note.sortIndex = bottom + 1
         return true
+    }
+
+    func projects() -> [Project] {
+        (try? fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.sortIndex)]))) ?? []
+    }
+
+    /// Places `project` just before `target`, or last when `target` is nil.
+    func moveProject(_ project: Project, before target: Project?) {
+        guard project.id != target?.id else { return }
+        var ordered = projects().filter { $0.id != project.id }
+        let index = target.flatMap { t in ordered.firstIndex { $0.id == t.id } } ?? ordered.count
+        ordered.insert(project, at: index)
+        renumber(ordered)
+    }
+
+    func renumber(_ ordered: [Project]) {
+        for (i, project) in ordered.enumerated() where project.sortIndex != Double(i) {
+            project.sortIndex = Double(i)
+        }
+    }
+
+    /// Keeps the project's pages, they become unfiled.
+    func deleteProject(_ project: Project) {
+        for note in project.notes ?? [] { note.project = nil }
+        delete(project)
     }
 
     /// Title matches first, then full-text body matches.
