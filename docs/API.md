@@ -84,3 +84,7 @@ curl -H "Authorization: Bearer $TOKEN" -X POST http://127.0.0.1:6683/api/notes \
 | `Notez/Views/APISettingsView.swift` | Settings > AI Access. |
 
 Everything runs on the main actor against `container.mainContext`, the same context the windows use. The sandbox entitlement comes from `ENABLE_INCOMING_NETWORK_CONNECTIONS = YES`.
+
+## Limitations
+
+- Projects aren't exposed yet. Pages report no project, and moving a page to the top level through the API takes it out of its project (`ModelContext.move` with no project).

@@ -113,6 +113,7 @@ This list must match the current build. Every commit that adds or changes a feat
 
 ## Ideas next
 
+- Projects in the MCP/REST API (list projects, file pages)
 - Global quick-capture hotkey / menu bar extra on Mac, Share Extension + widget on iOS
 - `[[` page links (the `notez://note/<id>` route already opens notes)
 - Orphaned image cleanup, trash/undo delete, markdown folder export
