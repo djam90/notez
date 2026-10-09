@@ -127,6 +127,14 @@ The bytes are sent to native once (base64 over the bridge) and stored as an `Ass
 
 ---
 
+## AI access (macOS)
+
+### MCP server and REST API ✅
+**Settings > AI Access** turns on a local server so AI tools can list, search, read, create, edit (replace or append), move, pin and delete pages while the app is running. Claude Code and Claude Desktop connect over MCP (`/mcp`); scripts can use REST (`/api/notes`, `/api/search`, `/api/assets`). Loopback only, bearer token, off by default. Bodies are markdown. Open pages reload when the API changes them. See [API.md](API.md).
+
+- **Verified:** every REST route and MCP method with curl, auth/Origin rejection, LAN IP refused, cycle-move rejection leaves the page untouched, Welcome page JSON → markdown matches its source, Claude Code (`claude -p` with an HTTP MCP config) searching and reading a page, editor append/replace on load in the browser dev host, Settings pane (screenshot, toggle off/on including rapid toggling), an open page reloading live with an API title change + appended table, deleting the open page via the API (selection clears, no crash).
+- **Not yet:** Claude Desktop via `mcp-remote`, changing the port from Settings.
+
 ## Platform behaviour
 
 | | macOS | iPad | iPhone |
@@ -150,7 +158,7 @@ What has been confirmed in practice so far:
 
 - **iPad + iPhone simulators (screenshots):** welcome seed, markdown conversion, table/task/code/quote rendering, persistence across relaunch, reopen last page, light theme, layout.
 - **Editor in a browser (`npm run dev`, scripted):** title → body navigation, slash menu filtering and insertion, table insert + Tab navigation, table bubble, formatting bubble position, markdown paste → table/tasks/bold, image paste, debounced save.
-- **macOS:** builds and launches. The UI has not been visually reviewed yet.
+- **macOS:** builds and launches. The UI has not been visually reviewed yet. Local API and MCP server exercised with curl and Claude Code.
 
 Not exercised end-to-end yet: ⌘K switcher, drag-to-re-nest, pin/delete flows, native image upload round trip (`uploadImage` → `Asset` → `notez://asset`), the macOS open panel, Copy as Markdown, link opening, CloudKit sync.
 
@@ -162,4 +170,5 @@ Not exercised end-to-end yet: ⌘K switcher, drag-to-re-nest, pin/delete flows, 
 - No icon picker UI.
 - Search is substring matching (`localizedStandardContains`) with no ranking or FTS index.
 - iOS has no formatting toolbar or link editor, only markdown shortcuts, `/` commands and autolink.
+- The local API can't upload images, and its markdown drops underline, image sizes and merged cells.
 - Ideas: global quick-capture hotkey or menu bar extra on Mac, iOS Share Extension and widget, `[[` page links (the `notez://note/` route already works), markdown/folder export, app icon.

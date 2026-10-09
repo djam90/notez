@@ -5,6 +5,7 @@ Notez: a fast native notes app (Notion-like nested pages, tables, embedded image
 Read these before non-trivial work:
 - `docs/ARCHITECTURE.md`: design, data model, JS⇄native bridge protocol, load/save flow
 - `docs/FEATURES.md`: every feature, how it's built, what is verified vs untested, known limitations
+- `docs/API.md`: the local MCP server + REST API for AI tools (macOS)
 
 ## Commands
 
@@ -35,6 +36,7 @@ Notez/                      SwiftUI app, single multiplatform target
   Store/Seed.swift          first-launch welcome page (markdown → converted by editor)
   Views/                    ContentView, SidebarView, NoteDetailView, QuickSwitcher
   Editor/                   EditorController (WKWebView + bridge), NotezSchemeHandler, EditorView
+  API/                      NotesAPI (ops shared by REST + MCP), MCPHandler, APIServer (macOS), MarkdownExport
   Resources/editor.html     BUILT from editor/ (committed, don't hand-edit)
 editor/src/                 main.ts (TipTap setup/menus/load/save), bridge.ts, slash.ts, style.css
 scripts/                    env/setup/build/run helpers
@@ -104,6 +106,8 @@ Always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Pl
 - **`change` messages for the previous note arrive after selection has moved.** `EditorController.note(with:)` handles this by fetching by id. Don't assume `currentNote` is the target.
 - **Deleting a `Note` cascades to its children, body and assets.** There is no trash yet.
 - **CloudKit is off** until a team + iCloud container are configured in Xcode (README). `.automatic` quietly falls back to local-only.
+- **The local API writes markdown to `pendingMarkdown`**, not JSON. After any API change to a page, call `NotesStore.reloadEverywhere(id)`, or an open editor overwrites it on the next keystroke. API tool/route changes need `docs/API.md` updated too.
+- **Testing the API:** it's off by default. The sandboxed prefs live at `~/Library/Containers/io.github.djam90.notez/Data/Library/Preferences/io.github.djam90.notez.plist` (`api.enabled`, `api.token`), so `defaults write <that path minus .plist> api.enabled -bool true` before launching, then `curl -H "Authorization: Bearer $(defaults read … api.token)" http://127.0.0.1:6683/api/notes`.
 - **Bundle ID is `io.github.djam90.notez`.** `scripts/env.sh` hardcodes it for simctl.
 
 ## Worktrees

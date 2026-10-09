@@ -50,6 +50,8 @@ Notez/
   Editor/EditorController.swift  Owns the WKWebView, JS bridge, delegates
   Editor/NotezSchemeHandler.swift notez:// scheme: editor HTML + image assets
   Editor/EditorView.swift        NS/UIViewRepresentable returning the shared web view
+  API/                           Local REST + MCP server for AI tools (macOS), see API.md
+  Views/APISettingsView.swift    Settings > AI Access (macOS)
   Resources/editor.html          BUILT ARTIFACT from editor/ (committed)
   Assets.xcassets                AppIcon (empty slots), AccentColor
 editor/                          TipTap editor source (vanilla TypeScript, no framework)
@@ -60,7 +62,7 @@ editor/                          TipTap editor source (vanilla TypeScript, no fr
   src/style.css                  All editor styling (light + dark)
   vite.config.ts                 Single-file build into ../Notez/Resources
 scripts/                         setup / build / run helpers
-docs/                            This file + FEATURES.md
+docs/                            This file, FEATURES.md, API.md
 ```
 
 ## Data model (`Notez/Models/Note.swift`)
@@ -74,7 +76,7 @@ Note ──assets─▶ [Asset]          (1:n, cascade)
 | Model | Fields | Notes |
 | --- | --- | --- |
 | `Note` | `id: UUID`, `title`, `icon` (emoji or empty), `preview` (first 160 chars, single line), `isPinned`, `sortIndex: Double`, `createdAt`, `updatedAt`, `parent`, `children`, `body`, `assets` | Kept small on purpose. The sidebar `@Query` loads every `Note`. |
-| `NoteBody` | `doc` (TipTap JSON string), `plainText` (for search), `pendingMarkdown`, `note` | Only faulted in when a note is opened or searched. |
+| `NoteBody` | `doc` (TipTap JSON string), `plainText` (for search), `pendingMarkdown`, `note` | Only faulted in when a note is opened or searched. `pendingMarkdown` is markdown awaiting conversion by the editor (seed, local API writes): it replaces an empty `doc` or is appended to an existing one, then cleared on the next save. |
 | `Asset` | `id: UUID`, `data` (`@Attribute(.externalStorage)`), `mimeType`, `createdAt`, `note` | Image bytes live outside SQLite. |
 
 CloudKit compatibility rules, which must hold for any new field:
@@ -112,7 +114,7 @@ All navigation away from `notez://` is cancelled. External links are handed to `
 
 | `window.notez.*` | Purpose |
 | --- | --- |
-| `load({id, title, doc, markdown, focus})` | Flush the previous note, then swap in this one. `doc` is a TipTap JSON string or null. `markdown` is used when `doc` is null. `focus` is `title`, `body` or `none`. |
+| `load({id, title, doc, markdown, focus})` | Flush the previous note, then swap in this one. `doc` is a TipTap JSON string or null. `markdown` (pending markdown) becomes the doc when `doc` is null and is appended to it otherwise, and the result is saved straight away. `focus` is `title`, `body` or `none`. Reloading the already-open id skips the flush: native changed the note (local API) and its version wins. |
 | `flush()` | Send any pending change now |
 | `resolveUpload(requestId, url)` | Finish an image upload |
 | `focus()`, `focusTitle()`, `pickImage()` | UI helpers (`pickImage` clicks a hidden `<input type=file>`) |
@@ -168,15 +170,21 @@ On macOS, `<input type=file>` needs `WKUIDelegate.runOpenPanel` (implemented, im
 - `pendingFocus` (not observed) tells the next `selectionChanged()` where to put the caret: the title for brand-new pages, the body for pages created from ⌘K with a title.
 - Menu commands reach the active window's store through `@FocusedValue(\.store)`, which `.focusedSceneValue(\.store, store)` provides.
 
+Changes made outside the editor (the local API) reach open windows through a weak registry of stores: `NotesStore.reloadEverywhere(id)` reloads a page that is open, and `noteWillBeDeletedEverywhere(note)` moves selection off a page about to be deleted. Lookups, `move` and search live in a `ModelContext` extension so the API can use them without a window.
+
 Mutations: `newNote(parent:title:)`, `newSubnote()`, `delete(_:)` (moves selection to the parent if the selected page or an ancestor is deleted), `togglePin(_:)`, `move(_:into:)` (refuses self and descendant targets to prevent cycles), `copyMarkdown()`.
 
 Search (`search(_:)`): an empty query returns the 20 most recently updated pages. Otherwise it fetches title matches (`localizedStandardContains`, newest first), then `NoteBody.plainText` matches, de-duplicated and capped at 50. Both run as SQLite predicates.
+
+## Local API and MCP server
+
+On macOS, `APIServer` (created once in `NotezApp.init`, so it runs with no windows) serves a REST API and an MCP server on `127.0.0.1` for AI tools. Opt-in from Settings, bearer-token auth. Reads export TipTap JSON to markdown in Swift; writes go through `pendingMarkdown`. Full details in [API.md](API.md).
 
 ## Build and project configuration
 
 - **Single target, three platforms:** `SUPPORTED_PLATFORMS = iphoneos iphonesimulator macosx`, `SDKROOT = auto`, `TARGETED_DEVICE_FAMILY = 1,2`, no Mac Catalyst. Deployment target 26.0 on iOS and macOS.
 - **Swift 6** with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and approachable concurrency. Everything is main-actor unless marked otherwise, which suits WebKit and SwiftData's `mainContext`. `MemberImportVisibility` is on, so files must import the module that defines a member they use (for example `UniformTypeIdentifiers` for `.image`).
-- **Generated Info.plist** (`GENERATE_INFOPLIST_FILE`) with `INFOPLIST_KEY_*` settings. No entitlements file. The macOS sandbox is enabled through `ENABLE_APP_SANDBOX`, `ENABLE_USER_SELECTED_FILES = readonly` and `ENABLE_OUTGOING_NETWORK_CONNECTIONS`.
+- **Generated Info.plist** (`GENERATE_INFOPLIST_FILE`) with `INFOPLIST_KEY_*` settings. No entitlements file. The macOS sandbox is enabled through `ENABLE_APP_SANDBOX`, `ENABLE_USER_SELECTED_FILES = readonly`, `ENABLE_OUTGOING_NETWORK_CONNECTIONS` and `ENABLE_INCOMING_NETWORK_CONNECTIONS` (local API).
 - **Editor bundle:** Vite + `vite-plugin-singlefile` inline all JS/CSS into one ~550 KB HTML file (~175 KB gzip). One file means one scheme request at startup and zero network. The built file is committed so Xcode builds don't need Node.
 
 ## Debugging

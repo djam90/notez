@@ -148,15 +148,13 @@ final class EditorController: NSObject {
         body.doc = doc
         body.plainText = text
         body.pendingMarkdown = ""
-        note.preview = String(text.prefix(160)).replacingOccurrences(of: "\n", with: " ")
+        note.setPreview(from: text)
         note.updatedAt = .now
     }
 
     private func note(with id: UUID) -> Note? {
         if let currentNote, currentNote.id == id { return currentNote }
-        var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        return context.note(id)
     }
 
     private func open(_ url: URL) {

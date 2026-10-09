@@ -40,7 +40,7 @@ cd editor && npm run dev       # iterate in a browser at /editor.html (mock host
 scripts/build.sh editor        # writes Notez/Resources/editor.html - commit it with your change
 ```
 
-Docs: [docs/FEATURES.md](docs/FEATURES.md) (every feature + how it's built), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design, data model, bridge), [CLAUDE.md](CLAUDE.md) (rules for agents).
+Docs: [docs/FEATURES.md](docs/FEATURES.md) (every feature + how it's built), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design, data model, bridge), [docs/API.md](docs/API.md) (local MCP/REST API), [CLAUDE.md](CLAUDE.md) (rules for agents).
 
 In Debug builds the web view is inspectable from Safari > Develop. JS errors are forwarded to the Xcode console as `[editor] ...`.
 
@@ -60,6 +60,7 @@ In Debug builds the web view is inspectable from Safari > Develop. JS errors are
 - Images: paste, drop, `⌘⇧I`, or `/image` (camera/photos on iOS), resizable
 - Task lists, highlight, code blocks, quotes, links (⌘-click to open)
 - `⌘N` new page, `⌘⇧N` sub-page, `⌘K` jump/create, `⌘⌥C` copy as Markdown
+- MCP server + REST API on the Mac so Claude and other AI tools can manage notes (Settings > AI Access, see [docs/API.md](docs/API.md))
 
 ## Ideas next
 

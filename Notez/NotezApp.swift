@@ -4,6 +4,9 @@ import SwiftUI
 @main
 struct NotezApp: App {
     let container: ModelContainer
+    #if os(macOS)
+    let server: APIServer
+    #endif
 
     init() {
         // `.automatic` syncs via CloudKit once the iCloud capability is enabled
@@ -14,6 +17,9 @@ struct NotezApp: App {
         } catch {
             fatalError("Failed to open store: \(error)")
         }
+        #if os(macOS)
+        server = APIServer(context: container.mainContext)
+        #endif
     }
 
     var body: some Scene {
@@ -24,6 +30,15 @@ struct NotezApp: App {
         .commands { NotezCommands() }
         #if os(macOS)
         .defaultSize(width: 1100, height: 720)
+        #endif
+
+        #if os(macOS)
+        Settings {
+            TabView {
+                APISettingsView(server: server)
+                    .tabItem { Label("AI Access", systemImage: "sparkles") }
+            }
+        }
         #endif
     }
 }

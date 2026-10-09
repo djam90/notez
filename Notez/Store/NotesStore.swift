@@ -17,6 +17,8 @@ final class NotesStore {
     @ObservationIgnored private var pendingFocus: EditorController.Focus = .none
     private static let expandedKey = "sidebar.expanded"
     private static let lastOpenedKey = "lastOpened"
+    /// Every open window, so changes made outside the editor (the local API) reach them.
+    private static let windows = NSHashTable<NotesStore>.weakObjects()
 
     init(context: ModelContext) {
         self.context = context
@@ -24,6 +26,7 @@ final class NotesStore {
         let saved = UserDefaults.standard.stringArray(forKey: Self.expandedKey) ?? []
         self.expanded = Set(saved.compactMap(UUID.init(uuidString:)))
         editor.onOpenNote = { [weak self] id in self?.open(id) }
+        Self.windows.add(self)
 
         // Reopen where you left off (or the welcome page on first launch).
         let welcome = Seed.welcomeIfNeeded(in: context)
@@ -79,7 +82,7 @@ final class NotesStore {
     @discardableResult
     func newNote(parent: Note? = nil, title: String = "") -> Note {
         // New pages go to the top of their level so quick dumps are easy to find.
-        let top = siblings(of: parent).map(\.sortIndex).min() ?? 0
+        let top = context.siblings(of: parent).map(\.sortIndex).min() ?? 0
         let note = Note(title: title, parent: parent, sortIndex: top - 1)
         context.insert(note)
         try? context.save()
@@ -93,11 +96,16 @@ final class NotesStore {
     }
 
     func delete(_ note: Note) {
+        noteWillBeDeleted(note)
+        context.delete(note)
+        try? context.save()
+    }
+
+    /// Moves selection off `note` or its subtree before it is deleted.
+    private func noteWillBeDeleted(_ note: Note) {
         if let selected = selectedNote, selected.id == note.id || selected.isDescendant(of: note) {
             selectedID = note.parent?.id
         }
-        context.delete(note)
-        try? context.save()
     }
 
     func togglePin(_ note: Note) {
@@ -106,13 +114,7 @@ final class NotesStore {
 
     /// Re-parent `note` under `newParent` (nil = top level). Refuses cycles.
     func move(_ note: Note, into newParent: Note?) {
-        if let newParent {
-            guard newParent.id != note.id, !newParent.isDescendant(of: note) else { return }
-        }
-        guard note.parent?.id != newParent?.id else { return }
-        let bottom = siblings(of: newParent).map(\.sortIndex).max() ?? 0
-        note.parent = newParent
-        note.sortIndex = bottom + 1
+        guard context.move(note, into: newParent) else { return }
         if let newParent { expanded.insert(newParent.id) }
         try? context.save()
     }
@@ -134,25 +136,59 @@ final class NotesStore {
 
     // MARK: - Queries
 
-    func fetchNote(_ id: UUID) -> Note? {
-        var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+    func fetchNote(_ id: UUID) -> Note? { context.note(id) }
+
+    func search(_ query: String, limit: Int = 50) -> [Note] { context.searchNotes(query, limit: limit) }
+
+    // MARK: - External changes
+
+    /// Reloads `id` in any window that has it open, after its content changed outside the editor.
+    static func reloadEverywhere(_ id: UUID) {
+        for store in windows.allObjects where store.editor.currentNote?.id == id {
+            store.editor.load(store.editor.currentNote)
+        }
     }
 
-    private func siblings(of parent: Note?) -> [Note] {
+    static func noteWillBeDeletedEverywhere(_ note: Note) {
+        for store in windows.allObjects { store.noteWillBeDeleted(note) }
+    }
+}
+
+// Shared by window stores and the local API, which runs without a window.
+extension ModelContext {
+    func note(_ id: UUID) -> Note? {
+        var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try? fetch(descriptor).first
+    }
+
+    func siblings(of parent: Note?) -> [Note] {
         if let parent { return parent.children ?? [] }
         let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.parent == nil })
-        return (try? context.fetch(descriptor)) ?? []
+        return (try? fetch(descriptor)) ?? []
+    }
+
+    /// Re-parents `note` to the bottom of `newParent` (nil = top level).
+    /// Returns false for no-ops and moves that would create a cycle.
+    @discardableResult
+    func move(_ note: Note, into newParent: Note?) -> Bool {
+        if let newParent {
+            guard newParent.id != note.id, !newParent.isDescendant(of: note) else { return false }
+        }
+        guard note.parent?.id != newParent?.id else { return false }
+        let bottom = siblings(of: newParent).map(\.sortIndex).max() ?? 0
+        note.parent = newParent
+        note.sortIndex = bottom + 1
+        return true
     }
 
     /// Title matches first, then full-text body matches.
-    func search(_ query: String, limit: Int = 50) -> [Note] {
+    func searchNotes(_ query: String, limit: Int = 50) -> [Note] {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else {
             var recent = FetchDescriptor<Note>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
-            recent.fetchLimit = 20
-            return (try? context.fetch(recent)) ?? []
+            recent.fetchLimit = min(limit, 20)
+            return (try? fetch(recent)) ?? []
         }
         var byTitle = FetchDescriptor<Note>(
             predicate: #Predicate { $0.title.localizedStandardContains(q) },
@@ -164,10 +200,10 @@ final class NotesStore {
 
         var seen = Set<UUID>()
         var results: [Note] = []
-        for note in (try? context.fetch(byTitle)) ?? [] where seen.insert(note.id).inserted {
+        for note in (try? fetch(byTitle)) ?? [] where seen.insert(note.id).inserted {
             results.append(note)
         }
-        for body in (try? context.fetch(byBody)) ?? [] {
+        for body in (try? fetch(byBody)) ?? [] {
             if let note = body.note, seen.insert(note.id).inserted { results.append(note) }
         }
         return Array(results.prefix(limit))

@@ -35,6 +35,10 @@ final class Note {
 
     var displayTitle: String { title.isEmpty ? "Untitled" : title }
 
+    func setPreview(from text: String) {
+        preview = String(text.prefix(160)).replacingOccurrences(of: "\n", with: " ")
+    }
+
     var sortedChildren: [Note] {
         (children ?? []).sorted { $0.sortIndex < $1.sortIndex }
     }

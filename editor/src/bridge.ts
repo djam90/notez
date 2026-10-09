@@ -8,7 +8,7 @@ export type NoteDoc = {
   title: string
   /** TipTap JSON document, serialised. Null for a brand new note. */
   doc: string | null
-  /** Used when `doc` is null, e.g. seeded or imported notes. */
+  /** Markdown awaiting conversion (seeded notes, local API writes). Appended to `doc` if both are set. */
   markdown?: string | null
   focus?: 'title' | 'body' | 'none'
 }

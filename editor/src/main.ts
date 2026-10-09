@@ -239,7 +239,10 @@ function flush() {
 }
 
 function load(note: NoteDoc) {
-  flush()
+  // Reloading the open note means native changed it (the local API), and that
+  // version wins over unsaved keystrokes.
+  if (note.id === currentId) clearTimeout(saveTimer)
+  else flush()
   currentId = note.id
   titleEl.value = note.title
   autosizeTitle()
@@ -250,8 +253,13 @@ function load(note: NoteDoc) {
   } catch {
     json = null
   }
-  const fromMarkdown = !json && !!note.markdown && !!editor.markdown
-  if (fromMarkdown) json = editor.markdown!.parse(note.markdown!)
+  // Pending markdown (seeded, or written through the local API) replaces an
+  // empty doc, or is appended to an existing one.
+  const fromMarkdown = !!note.markdown && !!editor.markdown
+  if (fromMarkdown) {
+    const parsed = editor.markdown!.parse(note.markdown!)
+    json = json ? { ...json, content: [...trimEmptyTail(json.content ?? []), ...(parsed.content ?? [])] } : parsed
+  }
 
   // Fresh EditorState so undo history doesn't leak between notes.
   const doc = json ? editor.schema.nodeFromJSON(json) : editor.schema.topNodeType.createAndFill()!
@@ -263,6 +271,12 @@ function load(note: NoteDoc) {
 
   if (note.focus === 'title') titleEl.focus()
   else if (note.focus === 'body') editor.commands.focus('end')
+}
+
+function trimEmptyTail(content: JSONContent[]) {
+  const out = [...content]
+  while (out.length && out[out.length - 1].type === 'paragraph' && !out[out.length - 1].content?.length) out.pop()
+  return out
 }
 
 // Flush when the app is backgrounded / window closed so nothing is lost.
