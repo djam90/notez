@@ -67,3 +67,7 @@ In Debug builds the web view is inspectable from Safari > Develop. JS errors are
 - Global quick-capture hotkey / menu bar extra on Mac, Share Extension + widget on iOS
 - `[[` page links (the `notez://note/<id>` route already opens notes)
 - Orphaned image cleanup, trash/undo delete, markdown folder export
+
+## License
+
+MIT, see [LICENSE](LICENSE).
