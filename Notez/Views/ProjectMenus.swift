@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// Icon and tint choices for projects. Stored on `Project` as plain strings so
 /// unknown values from a newer build just fall back to the defaults.
@@ -23,6 +28,27 @@ enum ProjectStyle {
     static func color(_ key: String) -> Color {
         colors.first { $0.key == key }?.color ?? .secondary
     }
+
+    /// A symbol pre-coloured for menus. Menus draw SF Symbols as monochrome
+    /// templates and ignore `foregroundStyle`, so the colour has to be baked
+    /// into a non-template image.
+    static func menuImage(_ symbol: String, color key: String) -> Image {
+        #if os(macOS)
+        let tint = key.isEmpty ? NSColor.secondaryLabelColor : NSColor(color(key))
+        let config = NSImage.SymbolConfiguration(paletteColors: [tint])
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) {
+            image.isTemplate = false
+            return Image(nsImage: image)
+        }
+        #else
+        let tint = key.isEmpty ? UIColor.secondaryLabel : UIColor(color(key))
+        if let image = UIImage(systemName: symbol)?.withTintColor(tint, renderingMode: .alwaysOriginal) {
+            return Image(uiImage: image)
+        }
+        #endif
+        return Image(systemName: symbol)
+    }
 }
 
 /// Icon + colour pickers for a project header's context menu.
@@ -36,7 +62,12 @@ struct ProjectStyleMenu: View {
             set: { store.setIcon($0, for: project) }
         )) {
             ForEach(ProjectStyle.icons, id: \.symbol) { icon in
-                Label(icon.name, systemImage: icon.symbol).tag(icon.symbol)
+                Label {
+                    Text(icon.name)
+                } icon: {
+                    ProjectStyle.menuImage(icon.symbol, color: project.color)
+                }
+                .tag(icon.symbol)
             }
         }
         .pickerStyle(.menu)
@@ -48,7 +79,7 @@ struct ProjectStyleMenu: View {
                 Label {
                     Text(option.name)
                 } icon: {
-                    Image(systemName: "circle.fill").foregroundStyle(option.color)
+                    ProjectStyle.menuImage(option.key.isEmpty ? "circle" : "circle.fill", color: option.key)
                 }
                 .tag(option.key)
             }
@@ -67,8 +98,14 @@ struct MoveToProjectMenu: View {
         if !projects.isEmpty {
             Menu("Move to Project", systemImage: "folder") {
                 ForEach(projects) { project in
-                    Button(project.displayName, systemImage: project.icon) {
+                    Button {
                         store.move(note, into: nil, project: project)
+                    } label: {
+                        Label {
+                            Text(project.displayName)
+                        } icon: {
+                            ProjectStyle.menuImage(project.icon, color: project.color)
+                        }
                     }
                     .disabled(note.parent == nil && note.project?.id == project.id)
                 }

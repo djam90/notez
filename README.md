@@ -6,7 +6,7 @@ Fast, native notes for macOS, iPadOS and iOS. Notion-style nested pages, proper 
 
 ```
 Notez/                 SwiftUI app (one multiplatform target: Mac + iPhone + iPad)
-  Models/              SwiftData models: Note (metadata), NoteBody (document), Asset (images)
+  Models/              SwiftData models: Note (metadata), Project, NoteBody (document), Asset (images), versioned Schema
   Store/               NotesStore: selection, tree ops, search. Seed: welcome page
   Views/               Sidebar tree, detail, ⌘K quick switcher
   Editor/              Persistent WKWebView + notez:// scheme handler + JS bridge
@@ -68,13 +68,48 @@ This bumps the version and build number, builds Release, quits the installed app
 
 ## Features
 
-- Nested pages, drag to re-nest, pin, persisted expansion, reopens last page
+This list must match the current build. Every commit that adds or changes a feature updates it (see CLAUDE.md). Details and verification status are in [docs/FEATURES.md](docs/FEATURES.md).
+
+**Pages**
+- Nested pages to any depth. Drag to re-nest, pin, delete (cascades to sub-pages, no trash yet)
+- Sidebar expansion persists, and the app reopens the last page
+- Welcome page on first launch
+
+**Projects**
+- Group top-level pages into projects, each a collapsible sidebar section. Unfiled pages live under **Pages**
+- Each project has an icon and colour (right-click the header). Colours show in the sidebar and in menus
+- Reorder by dragging headers or with Move Up/Down. File pages by dragging, or with **Move to Project** in the row menu or the page ⋯ menu
+- New pages go into the open page's project. Deleting a project keeps its pages
+
+**Navigation**
+- `⌘K` palette: instant jump by title or full text, or create a page from the query
+- Breadcrumb subtitle on Mac (Project / Parent / …)
+
+**Editor**
 - `/` command menu, markdown shortcuts, pasting markdown converts to rich text
+- Formatting bubble (Mac/iPad pointer), links (⌘-click to open), task lists, highlight, code blocks, quotes
 - Tables: resizable columns, header toggle, merge/split, row/col controls
 - Images: paste, drop, `⌘⇧I`, or `/image` (camera/photos on iOS), resizable
-- Task lists, highlight, code blocks, quotes, links (⌘-click to open)
-- `⌘N` new page, `⌘⇧N` sub-page, `⌘K` jump/create, `⌘⌥C` copy as Markdown
-- MCP server + REST API on the Mac so Claude and other AI tools can manage notes (Settings > AI Access, see [docs/API.md](docs/API.md))
+- Autosave (300 ms debounce, flushed on switch/background). Copy page as Markdown
+
+**AI access (Mac)**
+- Local MCP server and REST API so Claude and other AI tools can list, search, read, create, edit, move and delete pages while Notez runs. Off by default, loopback only, bearer token. Settings (`⌘,`) > AI Access. See [docs/API.md](docs/API.md)
+
+**Data safety**
+- Dev builds ("Notez Dev", red DEV Dock badge) have separate data from the installed app
+- Versioned schema, a backup on each version upgrade, an error screen instead of a crash if data can't be opened
+- `scripts/release-mac.sh` for versioned installs with a backup
+
+**Shortcuts**
+
+| Action | Keys |
+| --- | --- |
+| New page / sub-page / project | `⌘N` / `⌘⇧N` / `⌘⌥N` |
+| Quick open | `⌘K` |
+| Insert image | `⌘⇧I` |
+| Pin / unpin page | `⌘⇧D` |
+| Delete page | `⌘⇧⌫` |
+| Copy page as Markdown | `⌘⌥C` |
 
 ## Ideas next
 

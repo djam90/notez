@@ -3,18 +3,33 @@
 Notez: a fast native notes app (Notion-like nested pages, tables, embedded images) for macOS, iPadOS and iOS. It is a SwiftUI shell plus SwiftData/CloudKit storage, with a TipTap editor running in one persistent WKWebView.
 
 Read these before non-trivial work:
-- `docs/ARCHITECTURE.md`: design, data model, JS⇄native bridge protocol, load/save flow
+- `README.md`: what the app does today (feature list, shortcuts), develop/release workflow
+- `docs/ARCHITECTURE.md`: design, data model, JS⇄native bridge protocol, load/save flow, versioning/backups
 - `docs/FEATURES.md`: every feature, how it's built, what is verified vs untested, known limitations
 - `docs/API.md`: the local MCP server + REST API for AI tools (macOS)
+
+## Keep the docs current (every commit)
+
+These docs are how future sessions learn what exists. They must describe the build as it is **after your commit**, so update them **in the same commit** as the code:
+
+| You changed | Update |
+| --- | --- |
+| Any user-visible feature, shortcut or menu item | `README.md` › Features (one line), `docs/FEATURES.md` (how it works + ✅/🟡 status + limitations) |
+| Models, store, bridge, flows, build/release config | `docs/ARCHITECTURE.md` |
+| A script, workflow, rule, convention, gotcha, or something you learned the hard way | `CLAUDE.md` (Commands / Hard rules / Gotchas / Lessons) |
+| Removed or replaced something | Delete or rewrite the old text. Stale docs are worse than none. |
+
+`scripts/githooks/commit-msg` enforces this. It rejects a commit that touches `Notez/`, `editor/src/` or `scripts/` without touching `README.md`, `CLAUDE.md` or `docs/`. Use `[skip docs]` in the message only for changes with nothing to document (pure refactor, typo, internal fix). `scripts/setup.sh` enables the hook (`core.hooksPath`, shared by all worktrees). Never bypass it with `--no-verify`.
 
 ## Commands
 
 ```sh
-scripts/setup.sh              # fresh clone / new worktree: npm ci in editor/
+scripts/setup.sh              # fresh clone / new worktree: docs hook + npm ci in editor/
 scripts/build.sh              # editor + macOS + iOS sim (default "all")
 scripts/build.sh editor|mac|ios
 scripts/run-mac.sh            # build + relaunch the Mac Debug app ("Notez Dev")
 scripts/release-mac.sh 0.3.0  # bump, build Release, back up data, install to /Applications, tag
+scripts/screenshot-mac.sh     # screenshot ONLY the Notez Dev window → /tmp/notez-mac.png
 scripts/run-sim.sh            # build + install + launch on sim, streams console
 SIM_NAME="iPad Pro 11-inch (M5)" scripts/run-sim.sh --screenshot   # saves /tmp/notez-sim.png
 
@@ -32,15 +47,18 @@ cd editor && npm run typecheck
 ```
 Notez/                      SwiftUI app, single multiplatform target
   NotezApp.swift            @main, ModelContainer, menu Commands (via @FocusedValue(\.store))
-  Models/Note.swift         Note (metadata), NoteBody (doc JSON + plainText), Asset (image blob)
+  Models/Note.swift         Note (metadata), Project (sidebar group), NoteBody (doc JSON + plainText), Asset (image blob)
+  Models/Schema.swift       VersionedSchema + migration plan (read its comment before changing a model)
   Store/NotesStore.swift    per-window @Observable state + ALL mutations + search
+  Store/StoreBackup.swift   copies the store aside when a new app version first launches
   Store/Seed.swift          first-launch welcome page (markdown → converted by editor)
-  Views/                    ContentView, SidebarView, NoteDetailView, QuickSwitcher
+  Views/                    ContentView, SidebarView (+ ProjectSection), NoteDetailView, QuickSwitcher (⌘K overlay),
+                            ProjectMenus (icon/colour choices, Move to Project), StoreErrorView
   Editor/                   EditorController (WKWebView + bridge), NotezSchemeHandler, EditorView
   API/                      NotesAPI (ops shared by REST + MCP), MCPHandler, APIServer (macOS), MarkdownExport
   Resources/editor.html     BUILT from editor/ (committed, don't hand-edit)
 editor/src/                 main.ts (TipTap setup/menus/load/save), bridge.ts, slash.ts, style.css
-scripts/                    env/setup/build/run helpers
+scripts/                    env/setup/build/run/release/screenshot helpers, githooks/commit-msg (docs check)
 docs/                       ARCHITECTURE.md, FEATURES.md
 ```
 
@@ -92,12 +110,17 @@ The Xcode project uses **file-system synchronized groups** (objectVersion 77). A
 Always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Platform `#if` branches mean one can break silently.
 
 - **Editor behaviour:** `cd editor && npm run dev`, open `/editor.html`. The dev host mocks the native side (localStorage saves, data-URL uploads) and `window.editor` is exposed for scripted checks such as `editor.getHTML()` or `editor.isActive('table')`. This is the fastest loop for anything in `editor/`.
+- **Mac window:** `scripts/run-mac.sh`, then `scripts/screenshot-mac.sh` and view `/tmp/notez-mac.png`. Never use plain `screencapture` (whole screen = the user's private apps). **Always look at the Mac window after touching `NotezApp`/`ContentView`/startup code, and before every `scripts/release-mac.sh`.** A blank window once shipped because this was skipped.
 - **Native rendering:** `scripts/run-sim.sh --screenshot` (iPhone) or with `SIM_NAME="iPad Pro 11-inch (M5)"`, then view `/tmp/notez-sim.png`. You can't tap in the simulator from the CLI, so to exercise a flow, seed state (see `Seed.swift`) or use `npm run dev`.
 - **JS errors in the app:** `scripts/run-sim.sh` streams the console. Look for `[editor] …` lines (forwarded `window.onerror` / unhandled rejections). Safari > Develop gives the full inspector on Debug builds.
 - **Fresh state on the simulator:** `xcrun simctl uninstall <udid> io.github.djam90.notez.dev` (wipes the store and UserDefaults, so the welcome page re-seeds).
 - Update the ✅/🟡 markers and "Verification status" in `docs/FEATURES.md` when you verify or add something.
 
 ## Gotchas
+
+- **Speed is a feature: no animated transitions on navigation.** `.sheet` animates in and out on macOS (~0.3 s each way), which made ⌘K feel laggy, so it's an overlay now. Use overlays or inline UI for anything on the path to opening a page.
+- **Menus ignore `foregroundStyle`.** SF Symbols in context menus and pickers render as monochrome templates. For coloured menu icons use `ProjectStyle.menuImage(_:color:)`, which bakes the colour into a non-template image.
+- **`onAppear` never fires on an empty `Group`.** Give it a real view (`Color.clear`), as `ContentView` does.
 
 - **Bubble menus:** `.bubble` needs `width: max-content` and the menus use `strategy: 'fixed'`. Without them Floating UI measures the element at full width and pins it to x=0.
 - **Two BubbleMenus** need distinct names (`BubbleMenu.extend({ name: 'tableMenu' })`) and distinct `pluginKey`s.

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Keeps the docs self-updating: a commit that changes app, editor or script
+# code must also touch README.md, CLAUDE.md or docs/ in the same commit.
+# Add [skip docs] to the message only when nothing user-visible, architectural
+# or workflow-related changed (pure refactor, typo, internal bug fix).
+# Enabled by scripts/setup.sh (git config core.hooksPath scripts/githooks).
+set -euo pipefail
+msg_file="$1"
+grep -qiF '[skip docs]' "$msg_file" && exit 0
+files=$(git diff --cached --name-only)
+echo "$files" | grep -qE '^(Notez/|editor/src/|scripts/)' || exit 0
+echo "$files" | grep -qE '^(README\.md|CLAUDE\.md|docs/)' && exit 0
+cat >&2 <<'MSG'
+Commit blocked: code changed but no docs did.
+Update in this same commit, as relevant:
+  README.md            Features list (one line per feature) and shortcuts
+  docs/FEATURES.md     how it works, ✅/🟡 status, known limitations
+  docs/ARCHITECTURE.md models, store, bridge, flows, build/release
+  CLAUDE.md            new rules, scripts, gotchas, lessons learned
+If nothing user-visible or architectural changed, add [skip docs] to the message.
+MSG
+exit 1

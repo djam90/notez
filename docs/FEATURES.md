@@ -20,7 +20,7 @@ Group top-level pages into named projects. Each project is a collapsible sidebar
 
 - **Create:** **File > New Project…** (⌘⌥N) or the sidebar folder+ button. Opens a name alert (`NotesStore.projectPrompt`).
 - **Header context menu:** New Page, Rename…, Icon, Color, Move Up/Down, Delete Project. Deleting keeps the pages, they move to **Pages**.
-- **Icon and colour:** the header shows `Project.icon` (SF Symbol) tinted with `Project.color`. Choices live in `ProjectStyle` (`Views/ProjectMenus.swift`). Unknown values fall back to the defaults.
+- **Icon and colour:** the header shows `Project.icon` (SF Symbol) tinted with `Project.color`. Choices live in `ProjectStyle` (`Views/ProjectMenus.swift`). Unknown values fall back to the defaults. Menus (the Icon and Color pickers, Move to Project) show real colours through `ProjectStyle.menuImage`, because menus render plain SF Symbols as monochrome templates. The baked images are verified to be coloured; in-menu rendering is 🟡.
 - **Reorder:** drag a project header onto another to place it above, or onto **Pages** to move it last. Project drags carry a `project:` prefix so page drop targets ignore them. Also Move Up/Down in the context menu (`NotesStore.moveProject`).
 - **Filing pages:** drag a row onto a project header, or **Move to Project** in the row context menu or the page **⋯** menu (`MoveToProjectMenu`). Sub-pages follow their top-level page.
 - **New pages** from ⌘N, the ✎ button and ⌘K go into the open page's project, like a new note in the current folder. An empty project shows a **New Page** row.

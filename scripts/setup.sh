@@ -2,6 +2,8 @@
 # One-time setup for a fresh clone or git worktree.
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
+# Shared by all worktrees. Blocks code commits that leave the docs behind.
+git -C "$ROOT" config core.hooksPath scripts/githooks
 cd "$ROOT/editor"
 npm ci
 echo "Ready. Xcode builds use the committed Notez/Resources/editor.html; run scripts/build.sh editor after editing editor/src."
