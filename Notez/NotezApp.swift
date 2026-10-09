@@ -1,5 +1,8 @@
 import SwiftData
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 @main
 struct NotezApp: App {
@@ -41,6 +44,10 @@ struct NotezApp: App {
                 StoreErrorView(message: storeError ?? "", backups: StoreBackup.folder(for: storeURL))
             }
         }
+        #if DEBUG && os(macOS)
+        // The dev build looks identical to the installed app in the Dock otherwise.
+        .onChange(of: true, initial: true) { NSApp.dockTile.badgeLabel = "DEV" }
+        #endif
         .commands { NotezCommands() }
         #if os(macOS)
         .defaultSize(width: 1100, height: 720)
