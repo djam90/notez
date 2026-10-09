@@ -11,6 +11,9 @@ struct ContentView: View {
         Group {
             if let store {
                 NotesWindow(store: store)
+            } else {
+                // Must be a real view: `onAppear` never fires on an empty Group.
+                Color.clear
             }
         }
         .onAppear {
