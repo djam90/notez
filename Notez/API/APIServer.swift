@@ -192,6 +192,10 @@ final class APIServer {
                 return .ok(try api.update(try request.jsonBody().merging(["id": id]) { $1 }))
             case ("DELETE", "/api/notes/:id"):
                 return .ok(try api.delete(["id": id]))
+            case ("GET", "/api/projects"):
+                return .ok(try api.listProjects([:]))
+            case ("POST", "/api/projects"):
+                return HTTPResponse(status: 201, json: try api.createProject(try request.jsonBody()))
             case ("GET", "/api/search"):
                 var args: [String: Any] = request.query
                 args["query"] = request.query["q"] ?? ""

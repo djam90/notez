@@ -41,11 +41,13 @@ Streamable HTTP transport, JSON responses only (no SSE stream, no sessions). `GE
 
 | Tool | Arguments | Notes |
 | --- | --- | --- |
-| `list_notes` | `parentId?` | No `parentId`: every page depth-first in sidebar order. `"root"`: top-level pages only. |
+| `list_notes` | `parentId?`, `projectId?` | No `parentId`: every page depth-first in sidebar order. `"root"`: top-level pages only. `projectId` limits either to one project (`"none"` = unfiled). |
+| `list_projects` | | `{projects: [project], unfiledPageCount}` in sidebar order. |
+| `create_project` | `name`, `icon?`, `color?` | Goes to the bottom of the sidebar. `icon`/`color` must be `ProjectStyle` values (the error lists them). |
 | `search_notes` | `query`, `limit?` (20, max 100) | Title matches, then full text. Each result has a `snippet`. Empty query = recently edited. |
 | `get_note` | `id` | Metadata + `markdown` + direct `children`. |
-| `create_note` | `title`, `markdown?`, `parentId?`, `icon?`, `pinned?` | New pages go to the top of their level. |
-| `update_note` | `id`, `title?`, `markdown?`, `appendMarkdown?`, `parentId?`, `icon?`, `pinned?` | Only given fields change. `parentId` moves the page (`"root"` = top level). Cycles are rejected before anything changes. |
+| `create_note` | `title`, `markdown?`, `parentId?`, `projectId?`, `icon?`, `pinned?` | New pages go to the top of their level. `projectId` files a new top-level page. |
+| `update_note` | `id`, `title?`, `markdown?`, `appendMarkdown?`, `parentId?`, `projectId?`, `icon?`, `pinned?` | Only given fields change. `parentId` moves the page (`"root"` = top level, keeping its project). `projectId` moves it to the top level of that project (`"none"` = unfiled). Cycles and `parentId` + `projectId` together are rejected before anything changes. |
 | `delete_note` | `id` | Deletes the page, its sub-pages and images. Marked `destructiveHint`. |
 
 Tool results carry both `structuredContent` and the same JSON as text. Failures come back as `isError: true` results with a message.
@@ -56,15 +58,19 @@ All responses are JSON. Errors are `{"error": "message"}` with a 4xx/5xx status.
 
 | Method and path | Body / query | Returns |
 | --- | --- | --- |
-| `GET /api/notes` | `?parentId=<id>\|root` | `{notes: [summary]}` |
+| `GET /api/notes` | `?parentId=<id>\|root&projectId=<id>\|none` | `{notes: [summary]}` |
+| `GET /api/projects` | | `{projects: [project], unfiledPageCount}` |
+| `POST /api/projects` | `{name, icon?, color?}` | `201` project |
 | `GET /api/search` | `?q=…&limit=…` | `{results: [summary + snippet]}` |
 | `GET /api/notes/<id>` | | detail |
-| `POST /api/notes` | `{title, markdown?, parentId?, icon?, pinned?}` | `201` detail |
-| `PATCH /api/notes/<id>` | `{title?, markdown?, appendMarkdown?, parentId?, icon?, pinned?}` | detail |
+| `POST /api/notes` | `{title, markdown?, parentId?, projectId?, icon?, pinned?}` | `201` detail |
+| `PATCH /api/notes/<id>` | `{title?, markdown?, appendMarkdown?, parentId?, projectId?, icon?, pinned?}` | detail |
 | `DELETE /api/notes/<id>` | | `{deleted, pagesDeleted}` |
 | `GET /api/assets/<id>` | | image bytes with their MIME type |
 
-A **summary** is `id, title, icon, parentId, path` (ancestor titles joined with ` / `), `pinned, childCount, preview, createdAt, updatedAt` (ISO 8601). A **detail** adds `markdown` and `children: [{id, title}]`.
+A **summary** is `id, title, icon, parentId, projectId, project` (the top-level page's project id and name, or null), `path` (ancestor titles joined with ` / `), `pinned, childCount, preview, createdAt, updatedAt` (ISO 8601). A **detail** adds `markdown` and `children: [{id, title}]`. A **project** is `id, name, icon, color, pageCount` (top-level pages).
+
+**Projects.** Only top-level pages carry a project; sub-pages report their root's. That's why `parentId` and `projectId` can't be combined.
 
 ```sh
 TOKEN=…   # from Settings
@@ -87,4 +93,4 @@ Everything runs on the main actor against `container.mainContext`, the same cont
 
 ## Limitations
 
-- Projects aren't exposed yet. Pages report no project, and moving a page to the top level through the API takes it out of its project (`ModelContext.move` with no project).
+- Projects can be listed, created and filed into, but not renamed, restyled, reordered or deleted through the API yet.

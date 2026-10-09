@@ -27,16 +27,29 @@ final class NotesAPI {
     // MARK: - Reads
 
     /// All pages depth-first in sidebar order, or the children of `parentId` ("root" = top level).
+    /// `projectId` limits either form to one project's pages ("none" = unfiled).
     func list(_ args: Args) throws -> Any {
+        var roots = context.siblings(of: nil).sorted { $0.sortIndex < $1.sortIndex }
+        if let projectID = args["projectId"] {
+            let project = try projectArg(projectID)
+            roots = roots.filter { $0.project?.id == project?.id }
+        }
         let notes: [Note]
-        if let parentID = args["parentId"] {
-            let parent = try parentNote(parentID)
-            notes = parent?.sortedChildren ?? context.siblings(of: nil).sorted { $0.sortIndex < $1.sortIndex }
+        if let parentID = args["parentId"], let parent = try parentNote(parentID) {
+            notes = parent.sortedChildren
+        } else if args["parentId"] != nil {
+            notes = roots
         } else {
             func walk(_ nodes: [Note]) -> [Note] { nodes.flatMap { [$0] + walk($0.sortedChildren) } }
-            notes = walk(context.siblings(of: nil).sorted { $0.sortIndex < $1.sortIndex })
+            notes = walk(roots)
         }
         return ["notes": notes.map(summary)]
+    }
+
+    func listProjects(_ args: Args) throws -> Any {
+        let projects = (try? context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.sortIndex)]))) ?? []
+        let unfiled = context.siblings(of: nil).filter { $0.project == nil }.count
+        return ["projects": projects.map(projectSummary), "unfiledPageCount": unfiled]
     }
 
     func search(_ args: Args) throws -> Any {
@@ -58,8 +71,13 @@ final class NotesAPI {
 
     func create(_ args: Args) throws -> Any {
         let parent = try args["parentId"].flatMap(parentNote)
+        let project = try args["projectId"].flatMap(projectArg)
+        if parent != nil, project != nil {
+            throw APIError.badRequest("give parentId or projectId, not both: sub-pages belong to their top-level page's project")
+        }
         let top = context.siblings(of: parent).map(\.sortIndex).min() ?? 0
         let note = Note(title: try string(args, "title") ?? "", parent: parent, sortIndex: top - 1)
+        if parent == nil { note.project = project }
         note.icon = try string(args, "icon") ?? ""
         note.isPinned = args["pinned"] as? Bool ?? false
         context.insert(note)
@@ -74,6 +92,10 @@ final class NotesAPI {
         let newParent = try args["parentId"].map(parentNote)
         if let parent = newParent ?? nil, parent.id == note.id || parent.isDescendant(of: note) {
             throw APIError.badRequest("can't move a page into itself or one of its sub-pages")
+        }
+        let newProject = try args["projectId"].map(projectArg)
+        if newProject != nil, let parent = newParent, parent != nil {
+            throw APIError.badRequest("give parentId or projectId, not both: sub-pages belong to their top-level page's project")
         }
         var contentChanged = false
         if let title = try string(args, "title") {
@@ -90,7 +112,13 @@ final class NotesAPI {
         }
         if let icon = try string(args, "icon") { note.icon = icon }
         if let pinned = args["pinned"] as? Bool { note.isPinned = pinned }
-        if let newParent { context.move(note, into: newParent) }
+        if let newProject {
+            // A project move always makes the page top-level.
+            context.move(note, into: nil, project: newProject)
+        } else if let newParent {
+            // "root" keeps the page in the project it was already under.
+            context.move(note, into: newParent, project: newParent == nil ? note.rootProject : nil)
+        }
         if contentChanged { note.updatedAt = .now }
         try context.save()
         // An open editor would otherwise overwrite this with its stale copy on the next keystroke.
@@ -107,6 +135,27 @@ final class NotesAPI {
         context.delete(note)
         try context.save()
         return ["deleted": id, "pagesDeleted": deleted]
+    }
+
+    func createProject(_ args: Args) throws -> Any {
+        guard let name = try string(args, "name")?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+            throw APIError.badRequest("name is required")
+        }
+        let icon = try string(args, "icon") ?? "folder"
+        let color = try string(args, "color") ?? ""
+        guard ProjectStyle.icons.contains(where: { $0.symbol == icon }) else {
+            throw APIError.badRequest("unknown icon \(icon). Use one of: \(ProjectStyle.icons.map(\.symbol).joined(separator: ", "))")
+        }
+        guard ProjectStyle.colors.contains(where: { $0.key == color }) else {
+            throw APIError.badRequest("unknown color \(color). Use one of: \(ProjectStyle.colors.map(\.key).filter { !$0.isEmpty }.joined(separator: ", ")), or \"\" for the default")
+        }
+        let bottom = (try? context.fetch(FetchDescriptor<Project>()))?.map(\.sortIndex).max() ?? 0
+        let project = Project(name: name, sortIndex: bottom + 1)
+        project.icon = icon
+        project.color = color
+        context.insert(project)
+        try context.save()
+        return projectSummary(project)
     }
 
     func asset(_ id: String) throws -> (data: Data, mimeType: String) {
@@ -155,6 +204,28 @@ final class NotesAPI {
         return try note(["id": id])
     }
 
+    /// A project id, or `null`/`""`/`"none"` for no project (unfiled).
+    private func projectArg(_ value: Any) throws -> Project? {
+        if value is NSNull { return nil }
+        guard let id = value as? String else { throw APIError.badRequest("projectId must be a string") }
+        if id.isEmpty || id == "none" { return nil }
+        guard let uuid = UUID(uuidString: id) else { throw APIError.badRequest("invalid projectId \(id)") }
+        var descriptor = FetchDescriptor<Project>(predicate: #Predicate { $0.id == uuid })
+        descriptor.fetchLimit = 1
+        guard let project = try? context.fetch(descriptor).first else { throw APIError.notFound("project \(id)") }
+        return project
+    }
+
+    private func projectSummary(_ project: Project) -> [String: Any] {
+        [
+            "id": project.id.uuidString,
+            "name": project.name,
+            "icon": project.icon,
+            "color": project.color,
+            "pageCount": project.notes?.filter { $0.parent == nil }.count ?? 0,
+        ]
+    }
+
     private func string(_ args: Args, _ key: String) throws -> String? {
         guard let value = args[key], !(value is NSNull) else { return nil }
         guard let string = value as? String else { throw APIError.badRequest("\(key) must be a string") }
@@ -171,6 +242,8 @@ final class NotesAPI {
             "title": note.title,
             "icon": note.icon,
             "parentId": note.parent?.id.uuidString ?? NSNull(),
+            "projectId": note.rootProject?.id.uuidString ?? NSNull(),
+            "project": note.rootProject?.name ?? NSNull(),
             "path": note.ancestors.map(\.displayTitle).joined(separator: " / "),
             "pinned": note.isPinned,
             "childCount": note.children?.count ?? 0,

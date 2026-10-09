@@ -14,7 +14,9 @@ final class MCPHandler {
     private static let instructions = """
     Notez is the user's personal notes app: nested pages (Notion-style), each with a title and a rich-text \
     body. Bodies are read and written as GitHub-flavoured markdown, including tables, task lists \
-    (- [ ] / - [x]) and ==highlights==. Pages form a tree: use parentId to nest pages. Prefer \
+    (- [ ] / - [x]) and ==highlights==. Pages form a tree: use parentId to nest pages. Top-level pages \
+    can belong to a project (a sidebar group, see list_projects); sub-pages belong to their top-level \
+    page's project. Use projectId to file a page or list one project's pages. Prefer \
     search_notes to find pages, and get_note before editing one. update_note with markdown replaces the \
     whole body, so to add to a page use appendMarkdown instead. Images appear as notez://asset/<id> URLs; \
     keep them as-is when rewriting a page.
@@ -110,13 +112,31 @@ final class MCPHandler {
 
     private static let idProp = prop("string", "Page id (UUID).")
     private static let parentID = prop("string", "Parent page id, or \"root\" for the top level.")
+    private static let projectID = prop("string", "Project id from list_projects, or \"none\" for no project. Only for top-level pages.")
 
     private static let tools: [Tool] = [
         Tool(
             name: "list_notes", title: "List pages",
-            description: "List pages with their ids, titles and paths. With no parentId, returns every page depth-first in sidebar order. With parentId, returns just that page's direct children (\"root\" for top-level pages).",
-            properties: ["parentId": parentID], required: [], readOnly: true,
+            description: "List pages with their ids, titles, paths and projects. With no parentId, returns every page depth-first in sidebar order. With parentId, returns just that page's direct children (\"root\" for top-level pages). projectId limits the result to one project's pages (\"none\" = pages in no project).",
+            properties: ["parentId": parentID, "projectId": projectID], required: [], readOnly: true,
             run: { try $0.list($1) }
+        ),
+        Tool(
+            name: "list_projects", title: "List projects",
+            description: "List projects, the named groups of top-level pages shown as sidebar sections, with their ids, names, icon, colour and number of top-level pages.",
+            properties: [:], required: [], readOnly: true,
+            run: { try $0.listProjects($1) }
+        ),
+        Tool(
+            name: "create_project", title: "Create project",
+            description: "Create a project. It goes to the bottom of the sidebar. Then file pages into it with create_note or update_note projectId.",
+            properties: [
+                "name": prop("string", "Project name."),
+                "icon": prop("string", "SF Symbol name, default \"folder\". One of: \(ProjectStyle.icons.map(\.symbol).joined(separator: ", "))."),
+                "color": prop("string", "Colour, default none. One of: \(ProjectStyle.colors.map(\.key).filter { !$0.isEmpty }.joined(separator: ", "))."),
+            ],
+            required: ["name"],
+            run: { try $0.createProject($1) }
         ),
         Tool(
             name: "search_notes", title: "Search pages",
@@ -136,11 +156,12 @@ final class MCPHandler {
         ),
         Tool(
             name: "create_note", title: "Create page",
-            description: "Create a page. It goes to the top of its level (top level unless parentId is given).",
+            description: "Create a page. It goes to the top of its level (top level unless parentId is given). Pass projectId instead of parentId to put a new top-level page in a project.",
             properties: [
                 "title": prop("string", "Page title."),
                 "markdown": prop("string", "Page body as markdown. Don't repeat the title as a heading."),
                 "parentId": parentID,
+                "projectId": projectID,
                 "icon": prop("string", "Optional single emoji shown in the sidebar."),
                 "pinned": prop("boolean", "Pin the page in the sidebar."),
             ],
@@ -149,13 +170,14 @@ final class MCPHandler {
         ),
         Tool(
             name: "update_note", title: "Update page",
-            description: "Change a page. Only the fields you pass are changed. markdown replaces the whole body; appendMarkdown adds to the end of it. Passing parentId moves the page (\"root\" moves it to the top level).",
+            description: "Change a page. Only the fields you pass are changed. markdown replaces the whole body; appendMarkdown adds to the end of it. Passing parentId moves the page (\"root\" moves it to the top level, keeping its project). Passing projectId moves it to the top level of that project (\"none\" = no project).",
             properties: [
                 "id": idProp,
                 "title": prop("string", "New title."),
                 "markdown": prop("string", "New body, replacing the existing one."),
                 "appendMarkdown": prop("string", "Markdown to add to the end of the body."),
                 "parentId": parentID,
+                "projectId": projectID,
                 "icon": prop("string", "Single emoji, or \"\" to clear."),
                 "pinned": prop("boolean", "Pin or unpin."),
             ],
