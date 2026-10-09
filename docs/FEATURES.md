@@ -62,7 +62,7 @@ On first launch with an empty store, `Seed.welcomeIfNeeded` creates **Welcome to
 ## Navigation
 
 ### ⌘K quick switcher (jump or create) 🟡
-**Go > Quick Open…** (⌘K) or the sidebar 🔍 button opens a sheet (`Views/QuickSwitcher.swift`):
+**Go > Quick Open…** (⌘K) or the sidebar 🔍 button opens a palette over the window (`Views/QuickSwitcher.swift`). It is an overlay, not a `.sheet`: sheets animate in and out, which made jumping to a page feel laggy. Now it opens and closes within a frame (checked on a frame-by-frame screen recording). Click outside to dismiss.
 
 - With an empty query it lists the 20 most recently edited pages.
 - Typing searches titles first, then full text (`NotesStore.search`), showing the breadcrumb path or a preview under each result.

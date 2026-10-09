@@ -33,8 +33,10 @@ private struct NotesWindow: View {
             NoteDetailView(store: store)
         }
         .onChange(of: store.selectedID) { store.selectionChanged() }
-        .sheet(isPresented: $store.showSwitcher) {
-            QuickSwitcher(store: store)
+        .overlay {
+            if store.showSwitcher {
+                QuickSwitcher(store: store)
+            }
         }
         .alert(
             store.projectPrompt == .new ? "New Project" : "Rename Project",

@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// ⌘K: fuzzy-ish jump to any page by title or content, or create one.
+/// An in-window overlay rather than a sheet: sheets animate in and out, and
+/// jumping to a page has to feel instant.
 struct QuickSwitcher: View {
     let store: NotesStore
-    @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var results: [Note] = []
     @State private var highlighted = 0
@@ -58,12 +59,24 @@ struct QuickSwitcher: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
             }
         }
-        #if os(macOS)
-        .frame(width: 560, height: 380)
-        #endif
+        .frame(maxWidth: 560)
+        .frame(height: 380)
+        .background(.regularMaterial, in: .rect(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator))
+        .shadow(color: .black.opacity(0.2), radius: 24, y: 8)
+        .padding(.horizontal, 16)
+        .padding(.top, 56)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background {
+            // Click outside to dismiss.
+            Color.black.opacity(0.08)
+                .ignoresSafeArea()
+                .onTapGesture(perform: dismiss)
+        }
         .onAppear {
             results = store.search("")
             fieldFocused = true
@@ -90,6 +103,10 @@ struct QuickSwitcher: View {
         guard rowCount > 0 else { return .handled }
         highlighted = (highlighted + delta + rowCount) % rowCount
         return .handled
+    }
+
+    private func dismiss() {
+        store.showSwitcher = false
     }
 
     private func choose() {
