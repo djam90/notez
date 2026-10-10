@@ -85,8 +85,10 @@ struct NotezCommands: Commands {
                 .disabled(store?.selectedNote == nil)
         }
         CommandMenu("Go") {
-            Button("Quick Open…") { store?.showSwitcher = true }
+            Button("Quick Open…") { store?.togglePalette(.quickOpen) }
                 .keyboardShortcut("k")
+            Button("Command Palette…") { store?.togglePalette(.commands) }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
         }
         CommandMenu("Page") {
             Button("Insert Image…") { store?.editor.pickImage() }

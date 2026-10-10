@@ -7,7 +7,7 @@ Notez is a native SwiftUI app (one multiplatform target for macOS, iPadOS and iO
 │ SidebarView (List + DisclosureGroup tree)  │  NoteDetailView             │
 │   @Query all Note rows (metadata only)     │   ┌───────────────────────┐ │
 │                                            │   │ EditorView            │ │
-│ QuickSwitcher (overlay, ⌘K)                │   │  = the one WKWebView  │ │
+│ QuickSwitcher / CommandPalette (⌘K / ⌘⇧K)  │   │  = the one WKWebView  │ │
 │                                            │   │  TipTap editor.html   │ │
 │        NotesStore (per window, @Observable)│   └──────────▲────────────┘ │
 │          selection, tree ops, search       │              │ JS bridge    │
@@ -50,6 +50,8 @@ Notez/
   Views/SidebarView.swift        Pinned, project sections, page tree, drag/drop, context menus
   Views/NoteDetailView.swift     Editor host + empty state + toolbar
   Views/QuickSwitcher.swift      ⌘K jump/create
+  Views/CommandPalette.swift     ⌘⇧K run an action by name
+  Views/Palette.swift            overlay panel shared by both
   Views/ProjectMenus.swift       Project icon/colour choices, style pickers, Move to Project menu
   Editor/EditorController.swift  Owns the WKWebView, JS bridge, delegates
   Editor/NotezSchemeHandler.swift notez:// scheme: editor HTML + image assets
@@ -183,7 +185,7 @@ On macOS, `<input type=file>` needs `WKUIDelegate.runOpenPanel` (implemented, im
 - `selectedID: UUID?` is bound to the sidebar `List(selection:)`.
 - `expanded: Set<UUID>` is persisted to `UserDefaults["sidebar.expanded"]`. `isExpanded(id)` returns a `Binding` for `DisclosureGroup`.
 - `collapsedProjects: Set<UUID>` is persisted to `UserDefaults["sidebar.collapsedProjects"]`. Project sections default to expanded. `isProjectExpanded(id)` returns the `Section(isExpanded:)` binding.
-- `showSwitcher` shows the ⌘K overlay (no animation, deliberately not a sheet).
+- `palette` (`.quickOpen` / `.commands` / nil) shows the ⌘K or ⌘⇧K overlay (no animation, deliberately not a sheet). `togglePalette` backs both menu shortcuts.
 - `projectPrompt` (`.new` / `.rename(Project)`) plus `projectName` drive the name alert in `NotesWindow`.
 - `pendingFocus` (not observed) tells the next `selectionChanged()` where to put the caret: the title for brand-new pages, the body for pages created from ⌘K with a title.
 - Menu commands reach the active window's store through `@FocusedValue(\.store)`, which `.focusedSceneValue(\.store, store)` provides.

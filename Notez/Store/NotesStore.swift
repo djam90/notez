@@ -9,7 +9,9 @@ final class NotesStore {
     let editor: EditorController
 
     var selectedID: UUID?
-    var showSwitcher = false
+    enum Palette { case quickOpen, commands }
+    /// The ⌘K / ⇧⌘K overlay showing, if any.
+    var palette: Palette?
     var expanded: Set<UUID> {
         didSet { UserDefaults.standard.set(expanded.map(\.uuidString), forKey: Self.expandedKey) }
     }
@@ -85,6 +87,15 @@ final class NotesStore {
 
     private func reveal(_ project: Project) {
         if collapsedProjects.contains(project.id) { collapsedProjects.remove(project.id) }
+    }
+
+    /// The shortcut for an open palette closes it, the other one swaps to it.
+    func togglePalette(_ kind: Palette) {
+        palette = palette == kind ? nil : kind
+    }
+
+    func collapseAll() {
+        expanded = []
     }
 
     func isExpanded(_ id: UUID) -> Binding<Bool> {

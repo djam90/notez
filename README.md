@@ -8,7 +8,7 @@ Fast, native notes for macOS, iPadOS and iOS. Notion-style nested pages, proper 
 Notez/                 SwiftUI app (one multiplatform target: Mac + iPhone + iPad)
   Models/              SwiftData models: Note (metadata), Project, NoteBody (document), Asset (images), versioned Schema
   Store/               NotesStore: selection, tree ops, search. Seed: welcome page
-  Views/               Sidebar tree, detail, ⌘K quick switcher
+  Views/               Sidebar tree, detail, ⌘K quick switcher, ⌘⇧K command palette
   Editor/              Persistent WKWebView + notez:// scheme handler + JS bridge
   Resources/editor.html  Built editor bundle (generated, committed)
 editor/                TipTap editor (vanilla TS, Vite, single-file build)
@@ -83,6 +83,7 @@ This list must match the current build. Every commit that adds or changes a feat
 
 **Navigation**
 - `⌘K` palette: instant jump by title or full text, or create a page from the query
+- `⌘⇧K` command palette: run any action by name (new page/project, pin, move to project, copy markdown, delete, settings…)
 - Breadcrumb subtitle on Mac (Project / Parent / …)
 
 **Editor**
@@ -106,6 +107,7 @@ This list must match the current build. Every commit that adds or changes a feat
 | --- | --- |
 | New page / sub-page / project | `⌘N` / `⌘⇧N` / `⌘⌥N` |
 | Quick open | `⌘K` |
+| Command palette | `⌘⇧K` |
 | Insert image | `⌘⇧I` |
 | Pin / unpin page | `⌘⇧D` |
 | Delete page | `⌘⇧⌫` |

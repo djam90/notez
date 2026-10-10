@@ -62,12 +62,20 @@ On first launch with an empty store, `Seed.welcomeIfNeeded` creates **Welcome to
 ## Navigation
 
 ### ⌘K quick switcher (jump or create) 🟡
-**Go > Quick Open…** (⌘K) or the sidebar 🔍 button opens a palette over the window (`Views/QuickSwitcher.swift`). It is an overlay, not a `.sheet`: sheets animate in and out, which made jumping to a page feel laggy. Now it opens and closes within a frame (checked on a frame-by-frame screen recording). Click outside to dismiss.
+**Go > Quick Open…** (⌘K) or the sidebar 🔍 button opens a palette over the window (`Views/QuickSwitcher.swift`, panel chrome in `Views/Palette.swift`). It is an overlay, not a `.sheet`: sheets animate in and out, which made jumping to a page feel laggy. Now it opens and closes within a frame (checked on a frame-by-frame screen recording). Click outside to dismiss.
 
 - With an empty query it lists the 20 most recently edited pages.
 - Typing searches titles first, then full text (`NotesStore.search`), showing the breadcrumb path or a preview under each result.
 - **↑/↓** move the highlight (`onKeyPress`), **Enter** opens it, **Esc** closes.
 - If no result's title exactly matches the query, the last row is **Create "<query>"**. Choosing it makes a new top-level page with that title and puts the caret in the body, so you can type ⌘K, a title, Enter, and start writing.
+
+### ⌘⇧K command palette 🟡
+**Go > Command Palette…** (⌘⇧K) opens the same overlay panel as ⌘K (`Views/Palette.swift`, shared by both) listing app actions (`Views/CommandPalette.swift`). Typing filters by title and keywords (every word must match, titles starting with the query rank first). ↑/↓, Enter, Esc and click outside work as in ⌘K. Pressing a palette's shortcut again closes it, the other one swaps to it (`NotesStore.togglePalette`).
+
+- Always: New Page, New Page in <project> (one per project), New Project…, Quick Open…, Collapse All Pages, Settings… (macOS).
+- With a page open: New Sub-page, Pin/Unpin, Insert Image…, Copy Page as Markdown, Move to <project>, Remove from Project, Rename Project, and for sub-pages Go to Parent Page and Move to Top Level. Delete Page is always last so it is never the default highlight.
+- Rows show the menu shortcut where there is one. The palette closes before running a command, so ones that open other UI (⌘K, the project alert) aren't covered.
+- Verified on macOS by driving it with synthetic keystrokes: open, filter, Enter to pin/unpin, swap to ⌘K. iOS builds but is untested (needs a hardware keyboard, there is no toolbar button).
 
 ### Breadcrumbs ✅ (iOS) / 🟡 (macOS)
 The detail navigation title is the page title. On macOS, `navigationSubtitle` shows the ancestor path ("Projects / Notez").

@@ -52,7 +52,7 @@ Notez/                      SwiftUI app, single multiplatform target
   Store/NotesStore.swift    per-window @Observable state + ALL mutations + search
   Store/StoreBackup.swift   copies the store aside when a new app version first launches
   Store/Seed.swift          first-launch welcome page (markdown → converted by editor)
-  Views/                    ContentView, SidebarView (+ ProjectSection), NoteDetailView, QuickSwitcher (⌘K overlay),
+  Views/                    ContentView, SidebarView (+ ProjectSection), NoteDetailView, QuickSwitcher (⌘K overlay), CommandPalette (⌘⇧K), Palette (shared overlay panel),
                             ProjectMenus (icon/colour choices, Move to Project), StoreErrorView
   Editor/                   EditorController (WKWebView + bridge), NotezSchemeHandler, EditorView
   API/                      NotesAPI (ops shared by REST + MCP), MCPHandler, APIServer (macOS), MarkdownExport
@@ -103,7 +103,7 @@ The Xcode project uses **file-system synchronized groups** (objectVersion 77). A
 
 **Add a TipTap extension.** Run `npm i @tiptap/extension-x` in `editor/`, register it in the `extensions` array in `main.ts`, and style it in `style.css` (light + dark). Check that it still round-trips through `getJSON()` → `nodeFromJSON` (it will if it is a normal node or mark). If it should survive markdown paste or export, check that it has markdown support.
 
-**Add a menu command or shortcut.** Add it to `NotezCommands` in `NotezApp.swift`. Avoid ⌘K (quick open), ⌘B/I/U and other editor-reserved shortcuts. WebKit gets key events first, and anything the page handles never reaches the menu.
+**Add a menu command or shortcut.** Add it to `NotezCommands` in `NotezApp.swift`. If it's useful without a page-specific UI, add it to `CommandPalette.commands` too. Avoid ⌘K (quick open), ⌘⇧K (command palette), ⌘B/I/U and other editor-reserved shortcuts. WebKit gets key events first, and anything the page handles never reaches the menu.
 
 ## Verifying changes
 

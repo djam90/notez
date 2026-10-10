@@ -34,8 +34,10 @@ private struct NotesWindow: View {
         }
         .onChange(of: store.selectedID) { store.selectionChanged() }
         .overlay {
-            if store.showSwitcher {
-                QuickSwitcher(store: store)
+            switch store.palette {
+            case .quickOpen: QuickSwitcher(store: store)
+            case .commands: CommandPalette(store: store)
+            case nil: EmptyView()
             }
         }
         .alert(

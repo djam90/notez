@@ -51,7 +51,7 @@ struct SidebarView: View {
         }
         .toolbar {
             ToolbarItem {
-                Button("Quick Open", systemImage: "magnifyingglass") { store.showSwitcher = true }
+                Button("Quick Open", systemImage: "magnifyingglass") { store.palette = .quickOpen }
             }
             ToolbarItem {
                 Button("New Project", systemImage: "folder.badge.plus") { store.beginNewProject() }
