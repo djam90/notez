@@ -36,7 +36,8 @@ We rejected Next.js in a webview: SSR/routing gives nothing to an offline app an
 ```
 Notez.xcodeproj/                 Hand-written project, objectVersion 77
   project.pbxproj                Uses PBXFileSystemSynchronizedRootGroup: every file
-                                 under Notez/ is in the target automatically
+                                 under Notez/ (NotezTests/, NotezUITests/) is in the
+                                 Notez (NotezTests, NotezUITests) target automatically
   xcshareddata/xcschemes/        Shared "Notez" scheme
 Notez/
   NotezApp.swift                 @main, ModelContainer, menu Commands
@@ -67,7 +68,12 @@ editor/                          TipTap editor source (vanilla TypeScript, no fr
   src/slash.ts                   "/" command menu
   src/style.css                  All editor styling (light + dark)
   vite.config.ts                 Single-file build into ../Notez/Resources
-scripts/                         setup / build / run helpers
+  src/extensions.ts              Content extensions (schema + markdown), shared with tests
+  src/doc.ts                     Pure load helpers: parseDoc, appendParsed, looksLikeMarkdown
+  test/unit/, test/e2e/          Vitest (jsdom) and Playwright (WebKit + Chromium) suites
+NotezTests/                      Swift Testing unit tests (hosted in the app), Fixtures/store-*.store
+NotezUITests/                    XCUITest smoke tests
+scripts/                         setup / build / run / test / release helpers
 docs/                            This file, FEATURES.md, API.md
 ```
 
@@ -92,12 +98,13 @@ Note ──assets─▶ [Asset]          (1:n, cascade)
 - Adding a property with a default, or removing one, migrates automatically even without a new version.
 - An incompatible change (for example String → Date) fails to open the store. `NotezApp` then shows `StoreErrorView` instead of crashing, and the store is left untouched.
 - Such changes need a frozen copy of the old models plus a `.custom` stage. The steps are in the comment in `Schema.swift`.
+- `MigrationTests` keep this honest. `NotezTests/Fixtures/store-*.store` are real stores written by earlier builds (`scripts/make-store-fixture.sh` writes `StoreFixture`'s pages with the current models, then folds the WAL into one file). Each test run opens a copy of every fixture with the current schema and plan, as the app does at launch, and checks the pages survived. A test compares the newest fixture's model hashes with the current models, so a model change without a new fixture fails.
 
 **Backups.** `StoreBackup.backUpIfVersionChanged` runs in `NotezApp.init` before the container opens. When `"<CFBundleShortVersionString> (<CFBundleVersion>)"` differs from `UserDefaults["store.lastLaunchedVersion"]`, it copies `default.store`, `-wal`, `-shm` and `.default_SUPPORT/` into `Application Support/Backups/<timestamp> from <old> to <new>/`, then prunes to the newest 5. The version is recorded before opening, so a build that fails to open the store doesn't take repeated backups and rotate the good ones out.
 
 **Dev and release data.** Debug builds use bundle ID `io.github.djam90.notez.dev` ("Notez Dev"), so they have their own container, store and UserDefaults. Release (`scripts/release-mac.sh`) is `io.github.djam90.notez`.
 
-CloudKit compatibility rules, which must hold for any new field:
+CloudKit compatibility rules, which must hold for any new field (`CloudKitCompatibilityTests` check all three on the Core Data model SwiftData generates):
 
 - Every stored property has a default value.
 - Every relationship is optional and has an inverse.
@@ -202,10 +209,20 @@ On macOS, `APIServer` (created once in `NotezApp.init`, so it runs with no windo
 
 ## Build and project configuration
 
-- **Single target, three platforms:** `SUPPORTED_PLATFORMS = iphoneos iphonesimulator macosx`, `SDKROOT = auto`, `TARGETED_DEVICE_FAMILY = 1,2`, no Mac Catalyst. Deployment target 26.0 on iOS and macOS.
+- **App target plus two test targets.** `NotezTests` is a unit test bundle hosted in `Notez.app` (`TEST_HOST`, `BUNDLE_LOADER`, same Swift settings as the app). `NotezUITests` is a UI test bundle (`TEST_TARGET_NAME = Notez`) without default MainActor isolation. Both are in the shared scheme's Test action; `scripts/test.sh` picks one with `-only-testing`.
+- **Single app target, three platforms:** `SUPPORTED_PLATFORMS = iphoneos iphonesimulator macosx`, `SDKROOT = auto`, `TARGETED_DEVICE_FAMILY = 1,2`, no Mac Catalyst. Deployment target 26.0 on iOS and macOS.
 - **Swift 6** with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and approachable concurrency. Everything is main-actor unless marked otherwise, which suits WebKit and SwiftData's `mainContext`. `MemberImportVisibility` is on, so files must import the module that defines a member they use (for example `UniformTypeIdentifiers` for `.image`).
 - **Generated Info.plist** (`GENERATE_INFOPLIST_FILE`) with `INFOPLIST_KEY_*` settings. No entitlements file. The macOS sandbox is enabled through `ENABLE_APP_SANDBOX`, `ENABLE_USER_SELECTED_FILES = readonly`, `ENABLE_OUTGOING_NETWORK_CONNECTIONS` and `ENABLE_INCOMING_NETWORK_CONNECTIONS` (local API).
 - **Editor bundle:** Vite + `vite-plugin-singlefile` inline all JS/CSS into one ~550 KB HTML file (~175 KB gzip). One file means one scheme request at startup and zero network. The built file is committed so Xcode builds don't need Node.
+
+## Tests
+
+Four suites, described in CLAUDE.md › Testing. The parts that shape the app's code:
+
+- **`AppLaunch`** (`NotezApp.swift`) detects a test run: hosting unit tests (`XCTestConfigurationFilePath` is set) or launched by a UI test (`-ui-testing`). Test runs use an in-memory store, a throwaway `notez.tests` UserDefaults suite (`AppLaunch.defaults`), no `StoreBackup` and no `APIServer`. Hosting unit tests also sets the activation policy to `.prohibited`, so no window or Dock icon appears.
+- **Injectable settings.** `NotesStore(context:defaults:)`, `Seed.welcomeIfNeeded(in:defaults:)` and `StoreBackup.backUpIfVersionChanged(storeURL:version:defaults:)` take their `UserDefaults` (and version) as parameters, so tests run against scratch suites.
+- **Bridge in tests.** `EditorController.handle(_:)` and `isReady` are internal so tests can feed messages directly, or wait for the real bundled editor to start in an off-screen `WKWebView` and drive it with `load`.
+- **Editor modules.** `main.ts` boots the editor on import, so the schema (`extensions.ts`) and pure load helpers (`doc.ts`) live in their own modules for Vitest. `bridge.test.ts` imports `main.ts` once against a fake `window.webkit.messageHandlers.notez` to test the production bridge path.
 
 ## Debugging
 

@@ -38,7 +38,8 @@ final class Note {
     var displayTitle: String { title.isEmpty ? "Untitled" : title }
 
     func setPreview(from text: String) {
-        preview = String(text.prefix(160)).replacingOccurrences(of: "\n", with: " ")
+        // The editor separates blocks with blank lines. Collapse all whitespace so previews read as one line.
+        preview = String(text.prefix(400).split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(160))
     }
 
     var sortedChildren: [Note] {

@@ -18,7 +18,7 @@ final class EditorController: NSObject {
     private let context: ModelContext
     private let schemeHandler: NotezSchemeHandler
 
-    private var isReady = false
+    private(set) var isReady = false
     private var pendingLoad: (() -> Void)?
     private(set) var currentNote: Note?
 
@@ -98,7 +98,7 @@ final class EditorController: NSObject {
 
     // MARK: - JS -> Native
 
-    fileprivate func handle(_ body: Any) {
+    func handle(_ body: Any) {
         guard let msg = body as? [String: Any], let type = msg["type"] as? String else { return }
         switch type {
         case "ready":

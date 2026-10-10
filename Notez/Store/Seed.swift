@@ -6,9 +6,9 @@ enum Seed {
 
     /// Creates a welcome page on first launch. Returns it if created.
     @discardableResult
-    static func welcomeIfNeeded(in context: ModelContext) -> Note? {
-        guard !UserDefaults.standard.bool(forKey: key) else { return nil }
-        UserDefaults.standard.set(true, forKey: key)
+    static func welcomeIfNeeded(in context: ModelContext, defaults: UserDefaults = AppLaunch.defaults) -> Note? {
+        guard !defaults.bool(forKey: key) else { return nil }
+        defaults.set(true, forKey: key)
         guard (try? context.fetchCount(FetchDescriptor<Note>())) == 0 else { return nil }
 
         let welcome = Note(title: "Welcome to Notez")

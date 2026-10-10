@@ -13,10 +13,10 @@ final class NotesStore {
     /// The ⌘K / ⇧⌘K overlay showing, if any.
     var palette: Palette?
     var expanded: Set<UUID> {
-        didSet { UserDefaults.standard.set(expanded.map(\.uuidString), forKey: Self.expandedKey) }
+        didSet { defaults.set(expanded.map(\.uuidString), forKey: Self.expandedKey) }
     }
     var collapsedProjects: Set<UUID> {
-        didSet { UserDefaults.standard.set(collapsedProjects.map(\.uuidString), forKey: Self.collapsedProjectsKey) }
+        didSet { defaults.set(collapsedProjects.map(\.uuidString), forKey: Self.collapsedProjectsKey) }
     }
 
     enum ProjectPrompt: Equatable {
@@ -28,25 +28,27 @@ final class NotesStore {
     var projectName = ""
 
     @ObservationIgnored private var pendingFocus: EditorController.Focus = .none
+    @ObservationIgnored private let defaults: UserDefaults
     private static let expandedKey = "sidebar.expanded"
     private static let collapsedProjectsKey = "sidebar.collapsedProjects"
     private static let lastOpenedKey = "lastOpened"
     /// Every open window, so changes made outside the editor (the local API) reach them.
     private static let windows = NSHashTable<NotesStore>.weakObjects()
 
-    init(context: ModelContext) {
+    init(context: ModelContext, defaults: UserDefaults = AppLaunch.defaults) {
         self.context = context
+        self.defaults = defaults
         self.editor = EditorController(context: context)
-        let saved = UserDefaults.standard.stringArray(forKey: Self.expandedKey) ?? []
+        let saved = defaults.stringArray(forKey: Self.expandedKey) ?? []
         self.expanded = Set(saved.compactMap(UUID.init(uuidString:)))
-        let collapsed = UserDefaults.standard.stringArray(forKey: Self.collapsedProjectsKey) ?? []
+        let collapsed = defaults.stringArray(forKey: Self.collapsedProjectsKey) ?? []
         self.collapsedProjects = Set(collapsed.compactMap(UUID.init(uuidString:)))
         editor.onOpenNote = { [weak self] id in self?.open(id) }
         Self.windows.add(self)
 
         // Reopen where you left off (or the welcome page on first launch).
-        let welcome = Seed.welcomeIfNeeded(in: context)
-        let lastID = UserDefaults.standard.string(forKey: Self.lastOpenedKey).flatMap(UUID.init(uuidString:))
+        let welcome = Seed.welcomeIfNeeded(in: context, defaults: defaults)
+        let lastID = defaults.string(forKey: Self.lastOpenedKey).flatMap(UUID.init(uuidString:))
         if let id = welcome?.id ?? lastID, fetchNote(id) != nil {
             selectedID = id
             selectionChanged()
@@ -73,7 +75,7 @@ final class NotesStore {
 
     /// Called from the view whenever `selectedID` changes.
     func selectionChanged() {
-        UserDefaults.standard.set(selectedID?.uuidString, forKey: Self.lastOpenedKey)
+        defaults.set(selectedID?.uuidString, forKey: Self.lastOpenedKey)
         editor.load(selectedNote, focus: pendingFocus)
         pendingFocus = .none
     }

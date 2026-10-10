@@ -1,16 +1,11 @@
-import { Editor, type JSONContent } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
-import { TableKit } from '@tiptap/extension-table'
-import { TaskList, TaskItem } from '@tiptap/extension-list'
-import Image from '@tiptap/extension-image'
-import Highlight from '@tiptap/extension-highlight'
-import Typography from '@tiptap/extension-typography'
+import { Editor } from '@tiptap/core'
 import { Placeholder } from '@tiptap/extensions'
-import { Markdown } from '@tiptap/markdown'
 import { BubbleMenu } from '@tiptap/extension-bubble-menu'
 import { EditorState } from '@tiptap/pm/state'
 import { post, uploadImage, resolveUpload, type NoteDoc } from './bridge'
 import { SlashCommand, slashItems } from './slash'
+import { contentExtensions } from './extensions'
+import { appendParsed, looksLikeMarkdown, parseDoc } from './doc'
 import './style.css'
 
 const SAVE_DELAY_MS = 300
@@ -33,16 +28,7 @@ tableMenu.className = 'bubble'
 const editor = new Editor({
   element: document.getElementById('editor')!,
   extensions: [
-    StarterKit.configure({
-      link: { openOnClick: false, autolink: true, defaultProtocol: 'https' },
-    }),
-    TableKit.configure({ table: { resizable: true } }),
-    TaskList,
-    TaskItem.configure({ nested: true }),
-    Image.configure({ resize: { enabled: true, alwaysPreserveAspectRatio: true, minWidth: 48 } }),
-    Highlight,
-    Typography,
-    Markdown,
+    ...contentExtensions(),
     Placeholder.configure({ placeholder: "Type '/' for commands, or just start dumping…" }),
     SlashCommand(slashItems(() => fileInput.click())),
     BubbleMenu.configure({
@@ -97,10 +83,6 @@ const editor = new Editor({
   },
   onUpdate: () => scheduleSave(),
 })
-
-function looksLikeMarkdown(text: string) {
-  return /^(#{1,6} |\s*[-*+] |\s*\d+\. |> |```|\|.+\|)|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)/m.test(text)
-}
 
 async function insertImageFile(file: Blob) {
   const url = await uploadImage(file)
@@ -247,23 +229,23 @@ function load(note: NoteDoc) {
   titleEl.value = note.title
   autosizeTitle()
 
-  let json: JSONContent | null = null
-  try {
-    json = note.doc ? JSON.parse(note.doc) : null
-  } catch {
-    json = null
-  }
+  let json = parseDoc(note.doc)
   // Pending markdown (seeded, or written through the local API) replaces an
   // empty doc, or is appended to an existing one.
   const fromMarkdown = !!note.markdown && !!editor.markdown
   if (fromMarkdown) {
-    const parsed = editor.markdown!.parse(note.markdown!)
-    json = json ? { ...json, content: [...trimEmptyTail(json.content ?? []), ...(parsed.content ?? [])] } : parsed
+    json = appendParsed(json, editor.markdown!.parse(note.markdown!))
   }
 
   // Fresh EditorState so undo history doesn't leak between notes.
   const doc = json ? editor.schema.nodeFromJSON(json) : editor.schema.topNodeType.createAndFill()!
-  editor.view.updateState(EditorState.create({ doc, plugins: editor.state.plugins }))
+  let state = EditorState.create({ doc, plugins: editor.state.plugins })
+  // Let appendTransaction plugins (the trailing paragraph after a table or
+  // list) normalise the doc now. Otherwise the first transaction does it, and
+  // on iOS focus() dispatches one mid-command, which throws "Applying a
+  // mismatched transaction".
+  state = state.apply(state.tr.setMeta('addToHistory', false))
+  editor.view.updateState(state)
   // Markdown-sourced notes get converted and persisted as JSON straight away.
   dirty = fromMarkdown
   if (fromMarkdown) flush()
@@ -271,12 +253,6 @@ function load(note: NoteDoc) {
 
   if (note.focus === 'title') titleEl.focus()
   else if (note.focus === 'body') editor.commands.focus('end')
-}
-
-function trimEmptyTail(content: JSONContent[]) {
-  const out = [...content]
-  while (out.length && out[out.length - 1].type === 'paragraph' && !out[out.length - 1].content?.length) out.pop()
-  return out
 }
 
 // Flush when the app is backgrounded / window closed so nothing is lost.

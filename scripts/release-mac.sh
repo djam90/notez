@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Ship the current worktree's branch: rebase onto origin/main, build-check iOS,
-# bump the version, build Release, push to main with a tag, back up your data
-# and install /Applications/Notez.app. Run it from the feature's worktree.
+# Ship the current worktree's branch: rebase onto origin/main, run the unit and
+# editor tests, build-check iOS, bump the version, build Release, push to main
+# with a tag, back up your data and install /Applications/Notez.app. Run it
+# from the feature's worktree.
 # Dev builds (scripts/run-mac.sh) are a separate app ("Notez Dev") with
 # separate data, so they never touch the installed one.
 # Usage: scripts/release-mac.sh [patch|minor|major|x.y.z]   (default: patch)
@@ -32,6 +33,9 @@ esac
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "usage: scripts/release-mac.sh [patch|minor|major|x.y.z]"
 ! git rev-parse -q --verify "refs/tags/v$version" >/dev/null || die "tag v$version already exists."
 echo "Releasing v$version (last was ${last:-none}) from $(git branch --show-current)"
+
+echo "Running unit and editor tests..."
+"$ROOT/scripts/test.sh" unit editor || die "tests failed, not releasing."
 
 # Platform #if branches can break iOS without touching the Mac build.
 echo "Checking the iOS build..."

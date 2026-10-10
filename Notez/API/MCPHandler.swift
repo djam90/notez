@@ -24,7 +24,7 @@ final class MCPHandler {
 
     /// Handles one JSON-RPC message or batch. Returns nil when nothing needs sending back (notifications).
     func handle(_ body: Data) -> Data? {
-        guard let json = try? JSONSerialization.jsonObject(with: body) else {
+        guard let json = try? JSONSerialization.jsonObject(with: body, options: .fragmentsAllowed) else {
             return encode(error(id: NSNull(), code: -32700, message: "Parse error"))
         }
         if let batch = json as? [[String: Any]] {

@@ -17,20 +17,19 @@ enum StoreBackup {
         storeURL.deletingLastPathComponent().appending(path: "Backups", directoryHint: .isDirectory)
     }
 
-    static func backUpIfVersionChanged(storeURL: URL) {
-        let defaults = UserDefaults.standard
+    static func backUpIfVersionChanged(storeURL: URL, version: String = appVersion, defaults: UserDefaults = .standard) {
         let previous = defaults.string(forKey: lastVersionKey)
-        guard previous != appVersion else { return }
+        guard previous != version else { return }
         // Recorded before opening the store, so a build that fails to open it
         // doesn't take a fresh backup per launch and rotate the good ones out.
-        defaults.set(appVersion, forKey: lastVersionKey)
+        defaults.set(version, forKey: lastVersionKey)
 
         let fm = FileManager.default
         guard fm.fileExists(atPath: storeURL.path) else { return }
 
         let stamp = Date().formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false))
             .replacingOccurrences(of: ":", with: "")
-        let name = "\(stamp) from \(previous ?? "unknown") to \(appVersion)"
+        let name = "\(stamp) from \(previous ?? "unknown") to \(version)"
         let dest = folder(for: storeURL).appending(path: name, directoryHint: .isDirectory)
 
         // SQLite needs the -wal/-shm files too, and external-storage blobs

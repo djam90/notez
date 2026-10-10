@@ -34,6 +34,12 @@ export function slashItems(pickImage: () => void): SlashItem[] {
   ]
 }
 
+/** Case-insensitive substring match on title and keywords (not the hint). */
+export function filterSlashItems(items: SlashItem[], query: string) {
+  const q = query.toLowerCase()
+  return items.filter((i) => `${i.title} ${i.keywords}`.toLowerCase().includes(q))
+}
+
 export function SlashCommand(items: SlashItem[]) {
   return Extension.create({
     name: 'slashCommand',
@@ -44,10 +50,7 @@ export function SlashCommand(items: SlashItem[]) {
           pluginKey: new PluginKey('slashCommand'),
           char: '/',
           command: ({ editor, range, props }) => props.run(editor, range),
-          items: ({ query }) => {
-            const q = query.toLowerCase()
-            return items.filter((i) => `${i.title} ${i.keywords}`.toLowerCase().includes(q))
-          },
+          items: ({ query }) => filterSlashItems(items, query),
           render: renderMenu,
         }),
       ]

@@ -21,6 +21,7 @@ struct PalettePanel<Rows: View>: View {
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($fieldFocused)
+                    .accessibilityIdentifier("palette.query")
                     .onSubmit(choose)
                     .onKeyPress(.downArrow) { move(1) }
                     .onKeyPress(.upArrow) { move(-1) }

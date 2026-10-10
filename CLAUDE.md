@@ -33,14 +33,20 @@ scripts/screenshot-mac.sh     # screenshot ONLY the Notez Dev window → /tmp/no
 scripts/run-sim.sh            # build + install + launch on sim, streams console
 SIM_NAME="iPad Pro 11-inch (M5)" scripts/run-sim.sh --screenshot   # saves /tmp/notez-sim.png
 
+scripts/test.sh               # unit (Swift) + editor (Vitest + Playwright), about 20 s. Run before every commit
+scripts/test.sh unit|editor   # one suite
+scripts/test.sh ui            # XCUITest smoke tests. TAKES OVER THE USER'S MAC, ask first (see Testing)
+scripts/make-store-fixture.sh # after any model change: snapshot the store for MigrationTests
+
 cd editor && npm run dev        # editor alone in a browser: http://localhost:5173/editor.html
-cd editor && npm run typecheck
+cd editor && npm run typecheck  # src, then tests and configs
+cd editor && npm run test:watch # Vitest in watch mode
 ```
 
 - **`xcode-select` on this machine points at CommandLineTools.** Raw `xcodebuild`/`simctl` fail unless `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` is set. `scripts/env.sh` handles this, so prefer the scripts.
 - DerivedData goes to `./build/` (gitignored, per worktree).
 - macOS builds use `CODE_SIGN_IDENTITY=-` (ad-hoc). No team is configured.
-- There are no tests yet. "Verified" means it builds on both platforms and you looked at it (see Verifying changes).
+- "Verified" means the tests pass, it builds on both platforms, and for UI you looked at it (see Testing and Verifying changes).
 
 ## Layout
 
@@ -57,12 +63,16 @@ Notez/                      SwiftUI app, single multiplatform target
   Editor/                   EditorController (WKWebView + bridge), NotezSchemeHandler, EditorView
   API/                      NotesAPI (ops shared by REST + MCP), MCPHandler, APIServer (macOS), MarkdownExport
   Resources/editor.html     BUILT from editor/ (committed, don't hand-edit)
-editor/src/                 main.ts (TipTap setup/menus/load/save), bridge.ts, slash.ts, style.css
+editor/src/                 main.ts (TipTap setup/menus/load/save), extensions.ts (schema + markdown), doc.ts (pure load
+                            helpers), bridge.ts, slash.ts, style.css
+editor/test/                unit/ (Vitest, jsdom), e2e/ (Playwright: WebKit + Chromium against npm run dev)
+NotezTests/                 Swift Testing unit tests, hosted in Notez Dev. Fixtures/store-*.store = stores from older builds
+NotezUITests/               XCUITest smoke tests (launch, ⌘K, ⇧⌘K, ⌘N)
 scripts/                    env/setup/build/run/release/screenshot helpers, githooks/commit-msg (docs check)
 docs/                       ARCHITECTURE.md, FEATURES.md
 ```
 
-The Xcode project uses **file-system synchronized groups** (objectVersion 77). Any file you add under `Notez/` is automatically compiled or bundled. Don't add `PBXFileReference`/`PBXBuildFile` entries to `project.pbxproj`. Resources are bundled flat, so look them up with `Bundle.main.url(forResource:withExtension:)` and no subdirectory.
+The Xcode project uses **file-system synchronized groups** (objectVersion 77). Any file you add under `Notez/`, `NotezTests/` or `NotezUITests/` is automatically compiled or bundled into that target. Don't add `PBXFileReference`/`PBXBuildFile` entries to `project.pbxproj`. Resources are bundled flat, so look them up with `Bundle.main.url(forResource:withExtension:)` and no subdirectory.
 
 ## Hard rules
 
@@ -93,7 +103,9 @@ The Xcode project uses **file-system synchronized groups** (objectVersion 77). A
 
 ## Recipes
 
-**Add a field to a model.** Give it a default value. Put it on `NoteBody` if it can be large. Additive changes migrate automatically, with no new schema version. Renames, type changes and data transforms need a new `VersionedSchema` and a migration stage (see the comment in `Models/Schema.swift`). Run the Debug app on the existing dev store before and after, so a migration failure shows up there first. Update `docs/ARCHITECTURE.md` › Data model.
+**Add a field to a model.** Give it a default value. Put it on `NoteBody` if it can be large. Additive changes migrate automatically, with no new schema version. Renames, type changes and data transforms need a new `VersionedSchema` and a migration stage (see the comment in `Models/Schema.swift`). Then run `scripts/test.sh unit`: `MigrationTests` opens every committed `Fixtures/store-*.store` with the new models, and `newestFixtureMatchesTheCurrentModels` fails until you run `scripts/make-store-fixture.sh` and commit the new fixture. Never delete or regenerate old fixtures, they are what shipped. `CloudKitCompatibilityTests` enforce hard rule 5. Update `docs/ARCHITECTURE.md` › Data model.
+
+**Add a test.** Swift: add a file under `NotezTests/` with `import Testing` and `@testable import Notez`, use `TestStore()` for an in-memory store and `ScratchDefaults()` for settings (`TestSupport.swift`). Never use `UserDefaults.standard` or the default `ModelContainer` in tests. Editor: pure logic goes in `editor/test/unit/*.test.ts` (import from `extensions.ts`/`doc.ts`, not `main.ts`, which boots on import), user flows in `editor/test/e2e/editor.spec.ts` using the `notez` fixture. A bug fix should come with a test that fails without it.
 
 **Add a slash command.** Add an entry to `slashItems` in `editor/src/slash.ts` (`title`, `hint`, `keywords`, `run(editor, range)` that starts with `chain(e, r)` so it deletes the `/query`). Then rebuild the editor.
 
@@ -105,9 +117,25 @@ The Xcode project uses **file-system synchronized groups** (objectVersion 77). A
 
 **Add a menu command or shortcut.** Add it to `NotezCommands` in `NotezApp.swift`. If it's useful without a page-specific UI, add it to `CommandPalette.commands` too. Avoid ⌘K (quick open), ⌘⇧K (command palette), ⌘B/I/U and other editor-reserved shortcuts. WebKit gets key events first, and anything the page handles never reaches the menu.
 
+## Testing
+
+`scripts/test.sh` runs the two fast suites. Run it before every commit; `scripts/release-mac.sh` runs it too and refuses to release on a failure.
+
+| Suite | Where | What it covers | Time |
+| --- | --- | --- | --- |
+| Swift unit (`NotezTests`) | Swift Testing, hosted in Notez Dev | model rules, move/search, `NotesStore`, local API + MCP, markdown export, backups, migrations from `Fixtures/`, CloudKit rules, and the real bundled editor driven off-screen through the bridge (pending markdown conversion, Swift vs editor markdown agreement, API round trip) | ~5 s incl. build check |
+| Editor unit (`editor/test/unit`) | Vitest + jsdom | markdown round trips, doc helpers, slash items, the production bridge path with a fake `webkit.messageHandlers` | ~1 s |
+| Editor e2e (`editor/test/e2e`) | Playwright, WebKit + Chromium, starts Vite on :5199 | typing, saving, slash menu, paste, bubbles, tables, tasks, image upload, undo isolation, the committed `editor.html` | ~12 s |
+| UI (`NotezUITests`) | XCUITest | the real app: launch renders the welcome page, ⌘K, ⇧⌘K, ⌘N | ~40 s |
+
+- **UI tests take over the user's Mac.** macOS enters "Automation Running" mode and drives the real keyboard and mouse, so the user can't work while they run. They also quit any running Notez Dev. Never run `scripts/test.sh ui` (or `all`) without asking the user first, and never add it to scripts that run unattended. Run it, with permission, after changing startup, `ContentView`, menus or palettes.
+- **Tests never touch real data.** Hosted unit tests and `-ui-testing` launches set `AppLaunch.isTesting`: in-memory store, `notez.tests` UserDefaults suite, no backups, no API server. The unit test host also sets the activation policy to `.prohibited`, so it shows no window and never steals focus.
+- Failures print a short summary; the full log is `build/test-<Target>.log` and `open build/TestResults/<Target>.xcresult` shows everything in Xcode.
+- One-off setup per machine for e2e: `scripts/setup.sh` installs the Playwright browsers (cached in `~/Library/Caches/ms-playwright`).
+
 ## Verifying changes
 
-Always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Platform `#if` branches mean one can break silently.
+Run `scripts/test.sh`, and always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Platform `#if` branches mean one can break silently.
 
 - **Editor behaviour:** `cd editor && npm run dev`, open `/editor.html`. The dev host mocks the native side (localStorage saves, data-URL uploads) and `window.editor` is exposed for scripted checks such as `editor.getHTML()` or `editor.isActive('table')`. This is the fastest loop for anything in `editor/`.
 - **Mac window:** `scripts/run-mac.sh`, then `scripts/screenshot-mac.sh` and view `/tmp/notez-mac.png`. Never use plain `screencapture` (whole screen = the user's private apps). **Always look at the Mac window after touching `NotezApp`/`ContentView`/startup code, and before every `scripts/release-mac.sh`.** A blank window once shipped because this was skipped.
@@ -121,6 +149,13 @@ Always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Pl
 - **Speed is a feature: no animated transitions on navigation.** `.sheet` animates in and out on macOS (~0.3 s each way), which made ⌘K feel laggy, so it's an overlay now. Use overlays or inline UI for anything on the path to opening a page.
 - **Menus ignore `foregroundStyle`.** SF Symbols in context menus and pickers render as monochrome templates. For coloured menu icons use `ProjectStyle.menuImage(_:color:)`, which bakes the colour into a non-template image.
 - **`onAppear` never fires on an empty `Group`.** Give it a real view (`Color.clear`), as `ContentView` does.
+
+- **Hosted tests share the dev app's bundle ID and sandbox.** Anything the app does at launch also runs before every unit test run, which is why `AppLaunch.isTesting` gates the store, backups and API server. Tests that write files must use `FileManager.default.temporaryDirectory` (the container's tmp), and can't read the repo, so fixtures are bundled resources (flat: give them unique names).
+- **`JSONSerialization` throws an Objective-C exception, not a Swift error, on a bare string or number.** In a test that crashes the whole host. Pass raw JSON text (`Data("...".utf8)`) when testing malformed input.
+- **`NotezUITests` doesn't use default MainActor isolation** (it conflicts with `XCTestCase`). Mark test methods `@MainActor` as in Apple's template.
+- **`xcodebuild` passes `TEST_RUNNER_FOO=x` to the test host as `FOO=x`.** `make-store-fixture.sh` uses this to enable the fixture writer.
+- **Playwright WebKit takes TipTap's Safari/iOS code paths** (desktop Safari user agent), which the Mac WKWebView doesn't. That's how it caught an iOS-only crash: `focus()` dispatching a transaction mid-command when a doc ends in a block. `load()` now normalises the trailing paragraph up front.
+- **In e2e, wait for the save you expect: `nextChange(id, before, (c) => c.text === '...')`.** Without the predicate an earlier debounced save (the title, a half-typed `/command`) can land first under load and match instead. Check new e2e tests with `npx playwright test --repeat-each=6 --workers=10`. Place the caret by clicking: outside WebKit, `focus()` runs in a `requestAnimationFrame` and races typing.
 
 - **Bubble menus:** `.bubble` needs `width: max-content` and the menus use `strategy: 'fixed'`. Without them Floating UI measures the element at full width and pins it to x=0.
 - **Two BubbleMenus** need distinct names (`BubbleMenu.extend({ name: 'tableMenu' })`) and distinct `pluginKey`s.
@@ -141,5 +176,6 @@ Committed: all source, the built `Notez/Resources/editor.html`, the Xcode projec
 
 **One feature per worktree, released from that worktree.** The user works on features in parallel Paseo worktrees and ships each with `scripts/release-mac.sh` run from inside it. The script rebases the branch onto `origin/main`, checks the iOS build, bumps the version (patch by default, `minor`/`major`/`x.y.z` to override), builds Release, pushes `HEAD:main` and the tag atomically, then backs up data, installs and checks a window appears. Feature branches are never pushed on their own, `main` on GitHub is the release history. Other worktrees pick up the new main when they next release, and the script lists the ones that are behind.
 
+- The release runs `scripts/test.sh unit editor` after rebasing and stops on a failure. It does not run the UI tests (they take over the Mac).
 - **Lesson:** the old script tagged whatever branch it ran on and never pushed, so v0.3.2 was installed from a feature branch that never reached main. Releasing from main would have rolled those changes back. Never release without pushing.
 - If the rebase conflicts the script stops. Run `git rebase origin/main`, resolve, rebuild, release again.

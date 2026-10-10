@@ -15,7 +15,7 @@ Any page can contain sub-pages, to any depth, like Notion. The sidebar shows a c
 - **UI:** `SidebarView` filters `@Query(sort: \Note.sortIndex)` to roots, and `NoteTree` renders each node recursively. Leaf pages render as plain `NoteRow`s. Pages with children render as `DisclosureGroup(isExpanded: store.isExpanded(id))`.
 - **Children order:** `Note.sortedChildren`, by `sortIndex`.
 
-### Projects ✅ (sidebar rendering) / 🟡 (flows)
+### Projects ✅
 Group top-level pages into named projects. Each project is a collapsible sidebar section between **Pinned** and **Pages**. **Pages** holds unfiled pages.
 
 - **Create:** **File > New Project…** (⌘⌥N) or the sidebar folder+ button. Opens a name alert (`NotesStore.projectPrompt`).
@@ -28,10 +28,10 @@ Group top-level pages into named projects. Each project is a collapsible sidebar
 - Collapse state persists (`NotesStore.collapsedProjects`). Opening a page in a collapsed project expands it.
 - New projects go to the bottom.
 
-### Expansion state persists 🟡
+### Expansion state persists ✅
 Expanded or collapsed folders survive relaunch. `NotesStore.expanded` is a `Set<UUID>` written to `UserDefaults["sidebar.expanded"]` in `didSet`. Creating a sub-page or moving a page into a parent auto-expands the parent. Opening a page via ⌘K or a link calls `revealInSidebar`, which expands its ancestors.
 
-### New page / new sub-page 🟡
+### New page / new sub-page ✅
 - **⌘N** (menu **File > New Page**, sidebar ✎ button, empty-state button) creates a top-level page in the open page's project.
 - **⌘⇧N** (**File > New Sub-page**, row context menu, detail **⋯** menu) creates a child of the selected page.
 - New pages go to the **top** of their level (`sortIndex = min(siblings) - 1`) so quick dumps are easy to find. The title field is focused.
@@ -42,10 +42,10 @@ Drag a page row onto another row to make it a child. Drag it onto the **Pages** 
 
 There is no drag to reorder siblings yet, only re-parenting.
 
-### Pinning 🟡
+### Pinning ✅
 Pin from the row context menu, the detail toolbar pin button, or **Page > Pin** (⌘⇧D). Pinned pages appear in a **Pinned** section above **Pages**. This is a `Note.isPinned` flag, filtered in `SidebarView.pinned`.
 
-### Delete 🟡
+### Delete ✅
 Row context menu, detail **⋯ > Delete Page**, or **Page > Delete Page** (⌘⇧⌫). This permanently deletes the page, all its descendants, their bodies and images (cascade). If the open page is deleted, or is inside the deleted subtree, selection moves to the deleted page's parent. There is no undo or trash yet.
 
 ### Page icons 🟡
@@ -61,7 +61,7 @@ On first launch with an empty store, `Seed.welcomeIfNeeded` creates **Welcome to
 
 ## Navigation
 
-### ⌘K quick switcher (jump or create) 🟡
+### ⌘K quick switcher (jump or create) ✅
 **Go > Quick Open…** (⌘K) or the sidebar 🔍 button opens a palette over the window (`Views/QuickSwitcher.swift`, panel chrome in `Views/Palette.swift`). It is an overlay, not a `.sheet`: sheets animate in and out, which made jumping to a page feel laggy. Now it opens and closes within a frame (checked on a frame-by-frame screen recording). Click outside to dismiss.
 
 - With an empty query it lists the 20 most recently edited pages.
@@ -69,13 +69,13 @@ On first launch with an empty store, `Seed.welcomeIfNeeded` creates **Welcome to
 - **↑/↓** move the highlight (`onKeyPress`), **Enter** opens it, **Esc** closes.
 - If no result's title exactly matches the query, the last row is **Create "<query>"**. Choosing it makes a new top-level page with that title and puts the caret in the body, so you can type ⌘K, a title, Enter, and start writing.
 
-### ⌘⇧K command palette 🟡
+### ⌘⇧K command palette ✅
 **Go > Command Palette…** (⌘⇧K) opens the same overlay panel as ⌘K (`Views/Palette.swift`, shared by both) listing app actions (`Views/CommandPalette.swift`). Typing filters by title and keywords (every word must match, titles starting with the query rank first). ↑/↓, Enter, Esc and click outside work as in ⌘K. Pressing a palette's shortcut again closes it, the other one swaps to it (`NotesStore.togglePalette`).
 
 - Always: New Page, New Page in <project> (one per project), New Project…, Quick Open…, Collapse All Pages, Settings… (macOS).
 - With a page open: New Sub-page, Pin/Unpin, Insert Image…, Copy Page as Markdown, Move to <project>, Remove from Project, Rename Project, and for sub-pages Go to Parent Page and Move to Top Level. Delete Page is always last so it is never the default highlight.
 - Rows show the menu shortcut where there is one. The palette closes before running a command, so ones that open other UI (⌘K, the project alert) aren't covered.
-- Verified on macOS by driving it with synthetic keystrokes: open, filter, Enter to pin/unpin, swap to ⌘K. iOS builds but is untested (needs a hardware keyboard, there is no toolbar button).
+- Covered by `NotezUITests` (⇧⌘K → New Project) and `NotesStoreTests` (toggle/swap). iOS builds but is untested (needs a hardware keyboard, there is no toolbar button).
 
 ### Breadcrumbs ✅ (iOS) / 🟡 (macOS)
 The detail navigation title is the page title. On macOS, `navigationSubtitle` shows the ancestor path ("Projects / Notez").
@@ -182,19 +182,26 @@ The bytes are sent to native once (base64 over the bridge) and stored as an `Ass
 
 ## Verification status
 
-What has been confirmed in practice so far:
+**Automated** (`scripts/test.sh`, see CLAUDE.md › Testing):
+
+- **Swift unit tests (111):** page tree helpers, cascade deletes, move rules and cycles, project ordering, search ranking, every `NotesStore` mutation and remembered state, the welcome seed, the local API (all operations and their validation), the MCP protocol and tool catalogue, markdown export for every node type, store backups, migrations from committed store fixtures, CloudKit model rules. Bridge: change and upload messages, plus the real bundled editor converting pending markdown, agreeing with the Swift markdown export, and round-tripping API markdown to the same document.
+- **Editor unit tests (78) and e2e tests (44, WebKit + Chromium):** markdown round trips, slash commands, the production bridge, autosave debounce, note switching and undo isolation, paste (markdown, text, images through `uploadImage`), bubbles, link input, tables, task checkboxes.
+- **UI tests (4, run on demand):** launch renders the welcome page in the sidebar and editor, ⌘K opens a page, ⇧⌘K creates a project, ⌘N then typing names the page.
+
+Confirmed by hand:
 
 - **iPad + iPhone simulators (screenshots):** project sections in the sidebar (temporary seed), welcome seed, markdown conversion, table/task/code/quote rendering, persistence across relaunch, reopen last page, light theme, layout.
 - **Editor in a browser (`npm run dev`, scripted):** title → body navigation, slash menu filtering and insertion, table insert + Tab navigation, table bubble, formatting bubble position, markdown paste → table/tasks/bold, image paste, debounced save.
 - **macOS:** builds and launches. The UI has not been visually reviewed yet. Local API and MCP server exercised with curl and Claude Code.
 
-Not exercised end-to-end yet: project create/rename/delete/move flows, ⌘K switcher, drag-to-re-nest, pin/delete flows, native image upload round trip (`uploadImage` → `Asset` → `notez://asset`), the macOS open panel, Copy as Markdown, link opening, CloudKit sync.
+Not exercised end-to-end yet: drag-to-re-nest, the macOS open panel, link opening, iOS-specific UI, CloudKit sync.
 
 ## Known limitations / next ideas
 
 - No trash or undo for page deletion.
 - Images belong to the page they were first added to. Copying an image into another page and then deleting the original page breaks it. Images removed from a document are never garbage-collected.
 - No sibling reordering by drag.
+- Copy as Markdown escapes `<`, `>` and `&` as HTML entities (`a -> b` becomes `a -&gt; b`). It parses back correctly. This is TipTap's serializer.
 - No icon picker UI.
 - Search is substring matching (`localizedStandardContains`) with no ranking or FTS index.
 - iOS has no formatting toolbar or link editor, only markdown shortcuts, `/` commands and autolink.

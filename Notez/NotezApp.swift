@@ -14,12 +14,18 @@ struct NotezApp: App {
     #endif
 
     init() {
+        #if os(macOS)
+        // Unit tests run inside this app. Keep it out of the Dock and from taking focus.
+        if AppLaunch.isHostingUnitTests { NSApplication.shared.setActivationPolicy(.prohibited) }
+        #endif
         // `.automatic` syncs via CloudKit once the iCloud capability is enabled
         // (see README); without it the store is purely local.
         let schema = Schema(versionedSchema: NotezSchema.self)
-        let config = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+        let config = AppLaunch.isTesting
+            ? ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+            : ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
         storeURL = config.url
-        StoreBackup.backUpIfVersionChanged(storeURL: config.url)
+        if !AppLaunch.isTesting { StoreBackup.backUpIfVersionChanged(storeURL: config.url) }
         do {
             container = try ModelContainer(
                 for: schema, migrationPlan: NotezMigrationPlan.self, configurations: config
@@ -31,7 +37,7 @@ struct NotezApp: App {
             storeError = String(describing: error)
         }
         #if os(macOS)
-        server = container.map { APIServer(context: $0.mainContext) }
+        server = AppLaunch.isTesting ? nil : container.map { APIServer(context: $0.mainContext) }
         #endif
     }
 
@@ -64,6 +70,24 @@ struct NotezApp: App {
         }
         #endif
     }
+}
+
+/// Test runs share the dev app's bundle ID, so without this they would open
+/// its store, change its settings and fight it for the API port.
+enum AppLaunch {
+    /// Hosting unit tests, or launched by a UI test (`-ui-testing`).
+    static let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || ProcessInfo.processInfo.arguments.contains("-ui-testing")
+
+    static let isHostingUnitTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        && !ProcessInfo.processInfo.arguments.contains("-ui-testing")
+
+    /// Settings for window state and the welcome seed. Tests start from empty ones.
+    static let defaults: UserDefaults = {
+        guard isTesting, let suite = UserDefaults(suiteName: "notez.tests") else { return .standard }
+        suite.removePersistentDomain(forName: "notez.tests")
+        return suite
+    }()
 }
 
 struct NotezCommands: Commands {

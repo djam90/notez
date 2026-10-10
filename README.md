@@ -40,6 +40,16 @@ cd editor && npm run dev       # iterate in a browser at /editor.html (mock host
 scripts/build.sh editor        # writes Notez/Resources/editor.html - commit it with your change
 ```
 
+Tests:
+
+```sh
+scripts/test.sh                # Swift unit tests + editor unit/e2e tests (~20 s, runs in the background)
+scripts/test.sh ui             # UI smoke tests: drives your real keyboard and mouse for ~40 s
+scripts/make-store-fixture.sh  # after changing a model: snapshot it so future builds are tested against it
+```
+
+Unit tests run inside Notez Dev with an in-memory store, so they never touch dev or real data. See CLAUDE.md › Testing for what each suite covers.
+
 Docs: [docs/FEATURES.md](docs/FEATURES.md) (every feature + how it's built), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design, data model, bridge), [docs/API.md](docs/API.md) (local MCP/REST API), [CLAUDE.md](CLAUDE.md) (rules for agents).
 
 In Debug builds the web view is inspectable from Safari > Develop. JS errors are forwarded to the Xcode console as `[editor] ...`.
@@ -53,7 +63,7 @@ scripts/release-mac.sh          # next patch (0.4.0 -> 0.4.1)
 scripts/release-mac.sh minor    # or major, or an exact 1.2.3
 ```
 
-With a clean working tree, this rebases the branch onto `origin/main` (and stops on conflicts), checks the iOS build, bumps the version and build number, builds Release, commits "Release vX.Y.Z", pushes it to `main` together with the `vX.Y.Z` tag, then quits the installed app, copies your data to `~/Notez-backups/<date>-before-vX.Y.Z/` (keeps the newest 10), swaps in the new `/Applications/Notez.app` and warns if no window appears. Finally it fast-forwards the main checkout and lists other worktrees that are now behind main.
+With a clean working tree, this rebases the branch onto `origin/main` (and stops on conflicts), runs the unit and editor tests, checks the iOS build, bumps the version and build number, builds Release, commits "Release vX.Y.Z", pushes it to `main` together with the `vX.Y.Z` tag, then quits the installed app, copies your data to `~/Notez-backups/<date>-before-vX.Y.Z/` (keeps the newest 10), swaps in the new `/Applications/Notez.app` and warns if no window appears. Finally it fast-forwards the main checkout and lists other worktrees that are now behind main.
 
 - **Dev vs real data:** Debug builds are a separate app, "Notez Dev" (`io.github.djam90.notez.dev`), with their own data. Trying out a work-in-progress build never touches your real notes.
 - **Data location:** `~/Library/Containers/io.github.djam90.notez/Data/Library/Application Support/` (`default.store*` plus `.default_SUPPORT/` for large images). It belongs to the bundle ID, so replacing the app keeps it.
