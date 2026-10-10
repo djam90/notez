@@ -28,7 +28,7 @@ scripts/setup.sh              # fresh clone / new worktree: docs hook + npm ci i
 scripts/build.sh              # editor + macOS + iOS sim (default "all")
 scripts/build.sh editor|mac|ios
 scripts/run-mac.sh            # build + relaunch the Mac Debug app ("Notez Dev")
-scripts/release-mac.sh 0.3.0  # bump, build Release, back up data, install to /Applications, tag
+scripts/release-mac.sh [minor] # ship this worktree: rebase on origin/main, push + tag, back up, install
 scripts/screenshot-mac.sh     # screenshot ONLY the Notez Dev window → /tmp/notez-mac.png
 scripts/run-sim.sh            # build + install + launch on sim, streams console
 SIM_NAME="iPad Pro 11-inch (M5)" scripts/run-sim.sh --screenshot   # saves /tmp/notez-sim.png
@@ -138,3 +138,8 @@ Always build both platforms (`scripts/build.sh mac && scripts/build.sh ios`). Pl
 ## Worktrees
 
 Committed: all source, the built `Notez/Resources/editor.html`, the Xcode project and the shared scheme. Not committed: `editor/node_modules`, `build/` and `xcuserdata`. In a new worktree, Xcode builds immediately. Run `scripts/setup.sh` only if you'll touch `editor/`. Each worktree has its own `build/` DerivedData, but the dev app and its data (Mac and simulator) are shared across worktrees (same bundle ID).
+
+**One feature per worktree, released from that worktree.** The user works on features in parallel Paseo worktrees and ships each with `scripts/release-mac.sh` run from inside it. The script rebases the branch onto `origin/main`, checks the iOS build, bumps the version (patch by default, `minor`/`major`/`x.y.z` to override), builds Release, pushes `HEAD:main` and the tag atomically, then backs up data, installs and checks a window appears. Feature branches are never pushed on their own, `main` on GitHub is the release history. Other worktrees pick up the new main when they next release, and the script lists the ones that are behind.
+
+- **Lesson:** the old script tagged whatever branch it ran on and never pushed, so v0.3.2 was installed from a feature branch that never reached main. Releasing from main would have rolled those changes back. Never release without pushing.
+- If the rebase conflicts the script stops. Run `git rebase origin/main`, resolve, rebuild, release again.

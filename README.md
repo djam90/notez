@@ -46,11 +46,14 @@ In Debug builds the web view is inspectable from Safari > Develop. JS errors are
 
 ## Releasing (your everyday copy)
 
+Each feature lives in its own worktree. When it's done, from that worktree:
+
 ```sh
-scripts/release-mac.sh 0.3.0
+scripts/release-mac.sh          # next patch (0.4.0 -> 0.4.1)
+scripts/release-mac.sh minor    # or major, or an exact 1.2.3
 ```
 
-This bumps the version and build number, builds Release, quits the installed app, copies your data to `~/Notez-backups/<date>-before-v0.3.0/`, installs `/Applications/Notez.app`, commits "Release v0.3.0" and tags `v0.3.0`. The working tree must be clean.
+With a clean working tree, this rebases the branch onto `origin/main` (and stops on conflicts), checks the iOS build, bumps the version and build number, builds Release, commits "Release vX.Y.Z", pushes it to `main` together with the `vX.Y.Z` tag, then quits the installed app, copies your data to `~/Notez-backups/<date>-before-vX.Y.Z/` (keeps the newest 10), swaps in the new `/Applications/Notez.app` and warns if no window appears. Finally it fast-forwards the main checkout and lists other worktrees that are now behind main.
 
 - **Dev vs real data:** Debug builds are a separate app, "Notez Dev" (`io.github.djam90.notez.dev`), with their own data. Trying out a work-in-progress build never touches your real notes.
 - **Data location:** `~/Library/Containers/io.github.djam90.notez/Data/Library/Application Support/` (`default.store*` plus `.default_SUPPORT/` for large images). It belongs to the bundle ID, so replacing the app keeps it.
@@ -99,7 +102,7 @@ This list must match the current build. Every commit that adds or changes a feat
 **Data safety**
 - Dev builds ("Notez Dev", red DEV Dock badge) have separate data from the installed app
 - Versioned schema, a backup on each version upgrade, an error screen instead of a crash if data can't be opened
-- `scripts/release-mac.sh` for versioned installs with a backup
+- `scripts/release-mac.sh` ships a worktree: rebase on main, push, tag, back up, install
 
 **Shortcuts**
 
